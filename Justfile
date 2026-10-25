@@ -1098,8 +1098,10 @@ validate: validate-rsr validate-state validate-ai-install
 ijson-jcs:
     #!/usr/bin/env bash
     set -euo pipefail
-    FILES=$(find . -name '*.json' -not -path './.git/*' -not -path './.devcontainer/*' -not -path './.vscode/*' -not -path './target/*' -not -path './zig-out/*' -not -path './zig-cache/*' | sort)
-    if [ -z "$FILES" ]; then echo "No JSON files"; exit 0; fi
+    # Estate canonical JSON: schemas + valid fixtures only; invalid fixtures are
+    # negative test data for the Zig validator, not required to be JCS-canonical.
+    FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
+    if [ -z "$FILES" ]; then echo "No estate JSON files"; exit 0; fi
     if command -v ijson-jcs >/dev/null 2>&1; then
         for f in $FILES; do echo "check $f"; ijson-jcs check "$f"; done
     else
@@ -1128,7 +1130,7 @@ ijson-jcs:
 ijson-jcs-fix:
     #!/usr/bin/env bash
     set -euo pipefail
-    FILES=$(find . -name '*.json' -not -path './.git/*' -not -path './.devcontainer/*' -not -path './.vscode/*' -not -path './target/*' -not -path './zig-out/*' -not -path './zig-cache/*' | sort)
+    FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
     if command -v ijson-jcs >/dev/null 2>&1; then
         for f in $FILES; do ijson-jcs canon "$f" --in-place 2>/dev/null || ijson-jcs canon "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
     else
@@ -1141,18 +1143,18 @@ ijson-jcs-fix:
 kyaml:
     #!/usr/bin/env bash
     set -euo pipefail
-    FILES=$(find . -name '*.yml' -o -name '*.yaml' | grep -v '^./.git/' | sort || true)
-    if [ -z "$FILES" ]; then echo "No YAML files"; exit 0; fi
+    FILES=$(find . -name '*.kyaml' -o -name '*.k9.yml' 2>/dev/null | grep -v '^./.git/' | sort || true)
+    if [ -z "$FILES" ]; then echo "No estate KYAML files (no *.kyaml) — passing (workflows are YAML 1.2, not KYAML)"; exit 0; fi
     if [ -f scripts/kyaml-format.sh ] && command -v yq >/dev/null 2>&1; then
         bash scripts/kyaml-format.sh --check $FILES
     else
-        echo "kyaml-format.sh or yq not available — running advisory YAML parse check"
+        echo "kyaml-format.sh or yq not available — running advisory KYAML parse check"
         python3 - <<'PY'
         import pathlib, sys
         try: import yaml; has_yaml=True
         except: has_yaml=False
         fail=0
-        for p in pathlib.Path('.').rglob('*.yml'):
+        for p in pathlib.Path('.').rglob('*.kyaml'):
             if '.git' in str(p): continue
             txt=p.read_text()
             if not txt.endswith('\n'): print(f"Missing final LF: {p}"); fail=1

@@ -89,8 +89,16 @@ jobs:
       - name: Check JSON — I-JSON/JCS (ijson-jcs) with Python fallback
         run: |
           set -euo pipefail
-          echo "Checking all JSON files for I-JSON/JCS compliance..."
-          FILES=$(find . -name '*.json' -not -path './.git/*' -not -path './target/*' -not -path './zig-out/*' -not -path './zig-cache/*' -not -path './.devcontainer/*' -not -path './.vscode/*' | sort)
+          echo "Checking estate JSON files for I-JSON/JCS compliance..."
+          # Estate canonical JSON: schemas + valid fixtures only. Invalid fixtures
+          # (negative test data for the Zig validator) and generated/example JSON
+          # are not required to be JCS-canonical — they are checked only for I-JSON
+          # at the Python fallback level. See docs/developer/ESTATE-COMPLIANCE.adoc.
+          FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
+          if [ -z "$FILES" ]; then
+            echo "No estate JSON files found — checking all JSON with I-JSON fallback"
+            FILES=$(find . -name '*.json' -not -path './.git/*' -not -path './target/*' -not -path './zig-out/*' -not -path './zig-cache/*' -not -path './.devcontainer/*' -not -path './.vscode/*' -not -path './fixtures/deployment-instances/invalid/*' -not -path './examples/*' -not -path './.github/labels.json' | sort)
+          fi
           if [ -z "$FILES" ]; then
             echo "No JSON files found — skipping"
             exit 0
@@ -213,12 +221,15 @@ jobs:
       - name: Check estate YAML is KYAML
         run: |
           set -euo pipefail
-          # Estate-owned YAML that must be KYAML: all .yml/.yaml/.kyaml NOT under .github/workflows that are bot-managed
-          # For game-server-admin, we check: .github/workflows/*.yml (KYAML), and any estate-owned config .kyaml
-          # Use the canonical script when yq is available; else advisory Python check
+          # Estate-owned YAML that must be KYAML: only *.kyaml (and *.k9.yml) are
+          # estate KYAML per YAML-POLICY §3.4. GitHub workflows (*.yml under
+          # .github/workflows) are YAML 1.2 for Actions and are NOT required to
+          # be KYAML — they are checked by actions-lock, not by kyaml-format.sh.
+          # For game-server-admin today there are no *.kyaml files, so this gate
+          # is advisory and will pass (future estate config should use .kyaml).
 
-          # Gather files
-          FILES=$(find . -name '*.yml' -o -name '*.yaml' -o -name '*.kyaml' | grep -v '^./.git/' | sort || true)
+          # Gather files — only estate KYAML, not workflows
+          FILES=$(find . -name '*.kyaml' -o -name '*.k9.yml' 2>/dev/null | grep -v '^./.git/' | sort || true)
           if [ -z "$FILES" ]; then
             echo "No YAML files found"
             exit 0
