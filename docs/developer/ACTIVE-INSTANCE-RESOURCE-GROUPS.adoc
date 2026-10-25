@@ -1,0 +1,84 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Optional Active-instance Resource Groups
+:revdate: 2026-10-25
+:status: design note only; not part of deployment-instance v0.1.0
+
+== Motivation and separate boundary
+
+A small host may have several installed games but normally run only one:
+minecraft-survival, minecraft-modded, barotrauma-main, dst-main and
+boston-unlocked. Installation identity remains stable while activity and resource
+policy change. A resource-group relation is therefore a separate policy layer,
+not a field secretly added to the proposed v0.1.0 deployment-instance contract.
+
+An illustrative policy could say resource-group main-game-host, max-active 1,
+with explicit instance-ID membership. It is neither a production schema nor a
+CPU/memory reservation, priority scheduler, game dependency or ownership claim.
+No group storage, actions, service edits, fleet dispatcher or scheduler is
+implemented. This note is based on deployment-instance-contract as an explicit review
+dependency while PR #112 awaits merge.
+
+== Possible semantics and explicit operator intent
+
+A group could enforce mutual exclusion for GSA-requested transitions, or offer
+an advisory conflict warning only. Choose explicitly: external/manual startup
+can violate a GSA-only admission rule. Do not claim host-wide enforcement
+without an independent authoritative runtime mechanism. Never make a game
+service depend on GSA to run or remain alive.
+
+Membership could be local-host-only initially; remote/federated exclusion would
+require an approved coordinator/failure model and is not proposed for the first
+implementation. Multiple groups per instance, max-active above one, and what
+counts as active (activating, active, reloading, stopping, unknown) all need
+decisions. Treat unknown/stale observations conservatively when deciding whether
+a transition can begin.
+
+A later explicit switch request should identify the group, requested instance
+and known conflicting instances; authorize all individual stop/start operations
+before a side effect. max-active must not silently grant permission to evict
+other players' servers. Provide a reviewable transition plan.
+
+== Candidate transition and failure handling
+
+. Resolve a fresh selected-instance snapshot and acquire an admission lease
+  for the group. Recheck membership, authorization and runtime observations.
+. Gracefully stop explicitly authorized conflicting instances. Verify every
+  conflict stopped, with a deadline and game-specific save/consistency checks.
+. Recheck for externally started conflicts, then start the requested instance.
+. Observe its game-specific health within a bounded startup window and record
+  the transition result.
+
+A failed stop prevents the new start. A failed start/health check must preserve
+the old instances' identities and prior states, and report partial progress.
+Do not blindly restart old instances: the requested process may still be
+running after a health/transport timeout. Verify it stopped, reauthorize any
+rollback, and avoid restoring an installation that was initially stopped.
+A network partition, lost lease or agent crash leaves runtime state unknown;
+reconcile observations before any retry. A durable transition record and
+idempotency policy would be needed to recover safely.
+
+Cancellation before side effects cancels the plan. Cancellation during stopping
+or startup cannot undo completed work automatically; return per-instance outcomes
+and an explicit recovery plan. Ordinary process exit does not auto-start another
+game. No unattended scheduling, priority/preemption, timed rotation, autoscaling,
+or resource accounting is introduced.
+
+== Decisions before any implementation
+
+Advisory versus enforced scope; membership/version ownership; active-state and
+staleness definition; interaction with manual/external startup; lease/race and
+crash recovery; per-game stop/health evidence; caller authorization and audit;
+rollback consent; cluster/component accounting for DST. Any future task must
+depend on approved instance selection and lifecycle capability policy. This
+note intentionally enables no live behavior.
+
+== Contract reference in this branch
+
+This branch includes the reviewed deployment-instance base from PR #112; it
+does not assume that PR has merged into main. See
+link:GAME-PROFILE-CONTRACT.adoc[the actual fixture contract boundary] and
+link:DEPLOYMENT-INSTANCE-DESIGN.adoc[the instance identity design]. The contract
+has one runtime identity and no parent/component or resource-group relation.
+These design limits do not authorize new fields, lifecycle execution or live
+deployment changes.
