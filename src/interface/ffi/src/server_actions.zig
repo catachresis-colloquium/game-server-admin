@@ -141,16 +141,30 @@ fn xmlEscapeAlloc(allocator: Allocator, s: []const u8) ![]u8 {
 // Action execution
 // ═══════════════════════════════════════════════════════════════════════════════
 
-/// Execute a lifecycle action against a container-managed game server.
-///
-/// Constructs the appropriate CLI command for the given runtime and
-/// action, then runs it via std.process.Child.
-pub fn executeAction(
+/// Injectable command boundary for tests and internal bounded dispatch. The
+/// `remote` flag indicates argv has already passed through validated SSH
+/// destination handling and shell quoting.
+pub const CommandRunner = struct {
+    context: *anyopaque,
+    run: *const fn (*anyopaque, Allocator, []const []const u8, bool) anyerror!ActionResult,
+};
+
+/// Execute one lifecycle action against a container-managed game server.
+/// Constructs the runtime command and runs it through the existing local/SSH
+/// validation and dispatch path.
+pub fn executeAction(allocator: Allocator, host: []const u8, action: ActionKind, name: []const u8, runtime: Runtime) !ActionResult {
+    return executeActionUsing(allocator, host, action, name, runtime, null);
+}
+
+/// Execute an action with an optional internal command runner. A null runner
+/// preserves the existing production std.process.Child behavior.
+pub fn executeActionUsing(
     allocator: Allocator,
     host: []const u8,
     action: ActionKind,
     container_name: []const u8,
     runtime: Runtime,
+    runner: ?CommandRunner,
 ) !ActionResult {
     const runtime_cmd: []const u8 = switch (runtime) {
         .podman => "podman",
@@ -287,7 +301,7 @@ pub fn executeAction(
                     argc += 1;
                     argv_buf[argc] = "--no-pager";
                     argc += 1;
-                    return dispatch(allocator, host, argv_buf[0..argc]);
+                    return dispatchUsing(allocator, host, argv_buf[0..argc], runner);
                 },
                 else => {
                     argv_buf[argc] = "status";
@@ -300,7 +314,7 @@ pub fn executeAction(
         },
     }
 
-    return dispatch(allocator, host, argv_buf[0..argc]);
+    return dispatchUsing(allocator, host, argv_buf[0..argc], runner);
 }
 
 /// Run `cmd_argv` either locally or, for a non-local host, over SSH. Callers
@@ -308,9 +322,13 @@ pub fn executeAction(
 /// decision so there is exactly one SSH code path. Assumes the caller has
 /// already validated `host` via `isSafeHost` when remote.
 fn dispatch(allocator: Allocator, host: []const u8, cmd_argv: []const []const u8) !ActionResult {
+    return dispatchUsing(allocator, host, cmd_argv, null);
+}
+fn dispatchUsing(allocator: Allocator, host: []const u8, cmd_argv: []const []const u8, runner: ?CommandRunner) !ActionResult {
     if (host.len > 0 and !isLocalhost(host)) {
-        return executeSSH(allocator, host, "", cmd_argv);
+        return executeSSHUsing(allocator, host, "", cmd_argv, runner);
     }
+    if (runner) |r| return r.run(r.context, allocator, cmd_argv, false);
     return runCommand(allocator, cmd_argv);
 }
 
@@ -326,11 +344,15 @@ fn dispatch(allocator: Allocator, host: []const u8, cmd_argv: []const []const u8
 /// `host` (ssh uses the default user).
 ///
 /// Returns the combined stdout output and exit code.
-pub fn executeSSH(
+pub fn executeSSH(allocator: Allocator, host: []const u8, user: []const u8, argv: []const []const u8) !ActionResult {
+    return executeSSHUsing(allocator, host, user, argv, null);
+}
+fn executeSSHUsing(
     allocator: Allocator,
     host: []const u8,
     user: []const u8,
     remote_argv: []const []const u8,
+    runner: ?CommandRunner,
 ) !ActionResult {
     if (remote_argv.len == 0) return error.InvalidParam;
     if (!isSafeHost(host)) return error.InvalidParam;
@@ -362,6 +384,7 @@ pub fn executeSSH(
         remote_cmd.items,
     };
 
+    if (runner) |r| return r.run(r.context, allocator, full_argv, true);
     return runCommand(allocator, full_argv);
 }
 
