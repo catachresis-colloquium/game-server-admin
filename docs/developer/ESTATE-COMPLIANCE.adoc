@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: MPL-2.0
+= Estate Compliance — I-JSON/JCS, KYAML, cicd-squabbler, proven-tests
+:revdate: 2026-10-25
+:toc: left
+:sectnums:
+
+This document explains the four estate compliance pillars added in the
+`arena/3a7f9ab2-game-server-admin` foundational rebuild, and how they relate
+to the five stacked PRs consolidated at `2613b50`.
+
+== I-JSON / JCS (RFC 7493 / 8785)
+
+*Estate standard:* `hyperpolymath/standards` `3-practice/JSON-POLICY.adoc` (D306) via
+`metadatastician/kyq`, re-implemented as `hyperpolymath/ijson-jcs`.
+
+Every `*.json` in the repo must be UTF-8, have exactly one final LF, have no
+duplicate object keys, use only I-JSON-safe numbers (no `-0`, no `Infinity`,
+no `NaN`), and be JCS-canonical when the file is semantically compared
+byte-for-byte (fixtures, schemas, manifests).
+
+[cols="1,3"]
+|===
+| Check | How
+
+| `just ijson-jcs` | Python I-JSON fallback + `ijson-jcs check` when the binary is present
+| `just ijson-jcs-fix` | `ijson-jcs canon --in-place` to re-sort keys and add the single LF
+| CI | `.github/workflows/estate-compliance.yml` `ijson-jcs` job; required-style gate
+|===
+
+Fixture JSON (`fixtures/deployment-instances/`, `fixtures/instance-registry-design/`,
+`fixtures/minecraft-systemd-readonly/`) is currently checked for I-JSON only;
+strict JCS sorting is advisory until the fixtures are re-canonicalised in a
+follow-up. Schemas (`schemas/*.schema.json`) are strict.
+
+== KYAML (estates YAML)
+
+*Estate standard:* `hyperpolymath/standards` `3-practice/YAML-POLICY.adoc` D280/D307,
+via `metadatastician/kyq`, distributed as `scripts/kyaml-format.sh` from
+`hyperpolymath/standards@8e48b1c`.
+
+Estate-authored `*.yml`/`*.yaml`/`*.kyaml` must be KYAML (Kpt-KYAML, comment-preserving
+via `yq -p yaml -o kyaml '.'` — the one rewriter proven to preserve comments in
+`tools/yaml-comment-proof`, standards#1021). No ambassador via `kubectl`, no
+post-processing `sed` after the rewrite.
+
+[cols="1,3"]
+|===
+| Check | How
+
+| `just kyaml` | `scripts/kyaml-format.sh --check` when `yq` 4.53.3 is present; Python `yaml.safe_load` + final-LF + no-tab fallback otherwise
+| `just kyaml-fix` | `bash scripts/kyaml-format.sh FILE...`
+| CI | `.github/workflows/estate-compliance.yml` `kyaml` job
+|===
+
+`.github/workflows/*.yml` remain suffix `.yml` (GitHub requires it) but must pass
+the KYAML check — `yq` reads YAML regardless of suffix. True estate config
+would use `.kyaml` (reserved per YAML-POLICY §3.4).
+
+== cicd-squabbler (gate diagnosis)
+
+*Tool:* `hyperpolymath/cicd-squabbler` — Rust, SPARK-proved invariant
+`green ⇔ required checks ran ∧ passed`, 8 deadlock moves, `squabble fetch/diag/fight`.
+
+The `estate-compliance.yml` `cicd-squabbler` job runs `squabble diagnose` and
+`squabble chains` (read-only) on every PR. It is advisory in v0.1: a deadlock
+that the repo can self-win is surfaced as a `::warning::`, not a failing check,
+per the gate-decoupling policy (only the repo's own code changes should block
+`red→green`).
+
+Local: `just squabble-diagnose`, `just squabble-chains`.
+
+The `scripts/install-zig.sh` pin and the `hypatia-scan.yml` 1.19.4/28.3 bump in this
+rebuild are examples of findings squabbler surfaced: stale reusable SHA `571cc73`
+and a hung Hypatia build that previously blocked SARIF upload.
+
+== proven-tests-and-benches (lattice)
+
+*Framework:* `hyperpolymath/proven-tests-and-benches` — Idris2, 3 tiers
+(Actually/Provisionally/Unproven), 17×14 lattice, tropical semiring, 5 `.ipkg`.
+
+Counts in this repo are derived from executed tests, not declared counts
+(provenance anti-gaming rule). The `estate-compliance.yml` `proven-tests` job
+runs all 7 suites via `scripts/install-zig.sh` + `zig build test*` and sums the
+`All N tests passed` lines, then maps each suite to its category×aspect cell.
+
+Local lattice: `just proven-category` (after `just test`).
+
+CRG parity: `just crg-badge-sync --check` (if `just` has the recipe from the
+proven-tests template) verifies `READINESS.adoc` `**Current Grade:**` matches the
+README badge.
+
+== pons-asinorum + panic-attack (deep recon)
+
+*Tools:* `hyperpolymath/pons-asinorum` (depth, 4 crates, falsifier gate) and
+`hyperpolymath/panic-attack` (breadth, 49 langs, 25 PA categories).
+
+Both run in `estate-compliance.yml` `deep-recon` as advisory jobs: findings are
+uploaded as artifacts and summarised in `$GITHUB_STEP_SUMMARY`; critical items are
+surfaced as warnings. The repo's existing `static-analysis-gate.yml` panic job
+remains the authoritative breach gate.
+
+Local: `just pons-scan`, `just panic-assail` / `just assail`.
+
+== Relationship to the 5 stacked PRs
+
+[cols="2,3"]
+|===
+| PR | Compliance impact
+
+| `deployment-instance-contract` (112) | New `fixtures/deployment-instances/*.json` + `schemas/deployment-instance-0.1.schema.json` are now I-JSON/JCS-gated; the schema's `cuelang` source is an estate-owned `.cue` checked by `just kyaml` (YAML superset handling)
+| `minecraft-systemd-readonly-adapter` (116) | New `fixtures/minecraft-systemd-readonly/*.json` and `scripts/check_version_drift.sh` are I-JSON/KYAML-gated
+| `barotrauma-dst-adapter-design` (115) | `fixtures/standard-operating-psychopathy/*` fixtures gated; DST topology doc references the `pon scan` depth analysis
+| `active-instance-resource-groups` (114) | No new fixtures, but the design doc's contract examples are validated for I-JSON
+| `instance-aware-registry` (113) | `fixtures/instance-registry-design/cases.json` and the Zig `deployment_registry` module counted in the proven-tests lattice (unit + property suites)
+|===
+
+All five docs are now listed in `docs/INDEX.adoc` under Developers; `docs/INDEX.adoc`
+itself is KYAML-checked (it is Asciidoc, not YAML, so the check skips it — included
+here for completeness).

@@ -28,7 +28,12 @@ workflows:
         - 'hyperpolymath/deed-ecosystem@3e69929a4b0b5610b477732ee125a156cbc8a040'
         - 'hyperpolymath/k9-ecosystem@20f6be5b5a14a48680b236955b5c4ad9033d00d4'
     '.github/workflows/governance.yml': []
+    '.github/workflows/estate-compliance.yml':
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
+        - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
+        - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'
     '.github/workflows/hypatia-scan.yml':
+        - 'actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9'
         - 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1'
         - 'actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3'
         - 'actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9'

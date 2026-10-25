@@ -1,0 +1,23 @@
+{
+  "instance_id": "minecraft-survival",
+  "unit": "minecraft-survival.service",
+  "observed_at_unix_seconds": 1792929600,
+  "monotonic_now_us": 12000000,
+  "systemctl_show": "Id=minecraft-survival.service\nLoadState=loaded\nActiveState=active\nWorkingDirectory=/srv/fixture/minecraft-survival\nActiveEnterTimestampMonotonic=2000000\nEnvironment=PASSWORD=systemd-secret-canary\n",
+  "process_argv": [
+    "/usr/bin/java",
+    "-Xms1G",
+    "-Xmx2G",
+    "-XX:+UseG1GC",
+    "-Dpassword=jvm-secret-canary",
+    "-jar",
+    "fabric-server-launch.jar",
+    "nogui"
+  ],
+  "server_properties": "# synthetic\nserver-ip=127.0.0.1\nserver-port=25565\nlevel-name=world\nrcon.password=config-secret-canary\nresource-pack=private-url-secret-canary\n",
+  "version_json": "{\"id\": \"1.21.11\", \"unused\": \"version-secret-canary\"}",
+  "mod_metadata_json": [
+    "{\"id\": \"fabricloader\", \"version\": \"0.18.1\", \"private\": \"mod-secret-canary\"}",
+    "{\"id\": \"lithium\", \"version\": \"0.21.0\", \"custom\": {\"secret\": \"nested-secret-canary\"}}"
+  ]
+}

@@ -353,8 +353,10 @@ pub fn executeSSH(
 
     const full_argv: []const []const u8 = &.{
         "ssh",
-        "-o", "StrictHostKeyChecking=accept-new",
-        "-o", "ConnectTimeout=10",
+        "-o",
+        "StrictHostKeyChecking=accept-new",
+        "-o",
+        "ConnectTimeout=10",
         target,
         "--",
         remote_cmd.items,
@@ -667,7 +669,27 @@ pub export fn gossamer_gsa_get_logs(
     const allocator = std.heap.c_allocator;
     const line_count: u32 = if (lines > 0) @intCast(lines) else 100;
 
-    // Get the first tracked server (for now; future: accept server_id param)
+    // Legacy calls have no instance ID. Never select by iterator order when
+    // inventory or legacy probe state contains multiple possible deployments.
+    var inventory = gsa.deployments.snapshot(allocator) catch {
+        main.setErrorStr("instance selection unavailable");
+        return "ERR";
+    };
+    defer inventory.deinit();
+    if (inventory.declarations.len > 0) {
+        _ = inventory.resolveLegacy(null) catch |err| {
+            main.setError("instance selection failed: {s}", .{@errorName(err)});
+            return "ERR";
+        };
+        // Opaque inventory hosts need an explicit backend resolver; never
+        // substitute an unrelated tracked probe for the selected installation.
+        main.setErrorStr("explicit instance backend required for logs");
+        return "ERR";
+    }
+    if (gsa.active_connections.count() > 1) {
+        main.setErrorStr("ambiguous deployment; explicit instance ID required");
+        return "ERR";
+    }
     var it = gsa.active_connections.iterator();
     const entry = it.next() orelse {
         main.setErrorStr("no servers tracked");
@@ -708,15 +730,15 @@ threadlocal var run_script_buf: [131072:0]u8 = undefined;
 
 pub export fn gossamer_gsa_run_script(
     script_path_z: [*:0]const u8,
-    arg_z:         [*:0]const u8,
-    env_json_z:    [*:0]const u8,
-    stdin_secret_z:[*:0]const u8,
+    arg_z: [*:0]const u8,
+    env_json_z: [*:0]const u8,
+    stdin_secret_z: [*:0]const u8,
 ) callconv(.c) c_int {
     const allocator = std.heap.c_allocator;
-    const script_path  = std.mem.span(script_path_z);
-    const arg          = std.mem.span(arg_z);
+    const script_path = std.mem.span(script_path_z);
+    const arg = std.mem.span(arg_z);
     const env_json_str = std.mem.span(env_json_z);
-    const secret       = std.mem.span(stdin_secret_z);
+    const secret = std.mem.span(stdin_secret_z);
 
     // Path constraint: must be under scripts/ AND contain no traversal. A bare
     // startsWith("scripts/") is bypassable ("scripts/../../etc/x"), so also
@@ -820,11 +842,11 @@ pub export fn gossamer_gsa_run_script(
 
     for (combined) |ch| {
         switch (ch) {
-            '"'  => w.writeAll("\\\"") catch break,
+            '"' => w.writeAll("\\\"") catch break,
             '\\' => w.writeAll("\\\\") catch break,
-            '\n' => w.writeAll("\\n")  catch break,
-            '\r' => w.writeAll("\\r")  catch break,
-            '\t' => w.writeAll("\\t")  catch break,
+            '\n' => w.writeAll("\\n") catch break,
+            '\r' => w.writeAll("\\r") catch break,
+            '\t' => w.writeAll("\\t") catch break,
             else => {
                 if (ch < 0x20) {
                     w.print("\\u{x:0>4}", .{ch}) catch break;
@@ -852,14 +874,14 @@ pub export fn gossamer_gsa_run_script(
 ///
 /// Returns 0 (GsaResult.ok) on success, negative on error.
 pub export fn gossamer_gsa_write_server_config(
-    profile_id_z:    [*:0]const u8,
-    config_json_z:   [*:0]const u8,
-    operators_json_z:[*:0]const u8,
+    profile_id_z: [*:0]const u8,
+    config_json_z: [*:0]const u8,
+    operators_json_z: [*:0]const u8,
 ) callconv(.c) c_int {
     const allocator = std.heap.c_allocator;
-    const profile_id   = std.mem.span(profile_id_z);
-    const config_str   = std.mem.span(config_json_z);
-    const ops_str      = std.mem.span(operators_json_z);
+    const profile_id = std.mem.span(profile_id_z);
+    const config_str = std.mem.span(config_json_z);
+    const ops_str = std.mem.span(operators_json_z);
 
     // profile_id becomes a path segment (container/{profile_id}/Settings.xml),
     // so it must be a strict allowlisted identifier — no '.', '/', or traversal.
@@ -890,7 +912,10 @@ pub export fn gossamer_gsa_write_server_config(
     const S = struct {
         fn get(obj: std.json.ObjectMap, key: []const u8, fallback: []const u8) []const u8 {
             if (obj.get(key)) |v| {
-                return switch (v) { .string => |s| s, else => fallback };
+                return switch (v) {
+                    .string => |s| s,
+                    else => fallback,
+                };
             }
             return fallback;
         }
@@ -916,19 +941,19 @@ pub export fn gossamer_gsa_write_server_config(
         }
     }.e;
 
-    const server_name   = esc(xa, cfg, "ServerName",               "GSA Server");
-    const description   = esc(xa, cfg, "ServerDescription",        "Managed by GSA");
-    const welcome       = esc(xa, cfg, "WelcomeMessage",           "Welcome!");
-    const port          = esc(xa, cfg, "ServerPort",               "6000");
-    const max_players   = esc(xa, cfg, "MaxPlayers",               "10");
-    const is_private    = esc(xa, cfg, "IsPrivate",                "true");
-    const password      = esc(xa, cfg, "ServerPassword",           "");
-    const is_pve        = esc(xa, cfg, "IsPvE",                    "true");
-    const raids         = esc(xa, cfg, "IsRaidsEnabled",           "false");
-    const wipe_days     = esc(xa, cfg, "WipePeriodDays",           "0");
-    const gather_mult   = esc(xa, cfg, "GatheringSpeedMultiplier", "2.0");
-    const learn_mult    = esc(xa, cfg, "LearningSpeedMultiplier",  "2.0");
-    const craft_mult    = esc(xa, cfg, "CraftingSpeedMultiplier",  "2.0");
+    const server_name = esc(xa, cfg, "ServerName", "GSA Server");
+    const description = esc(xa, cfg, "ServerDescription", "Managed by GSA");
+    const welcome = esc(xa, cfg, "WelcomeMessage", "Welcome!");
+    const port = esc(xa, cfg, "ServerPort", "6000");
+    const max_players = esc(xa, cfg, "MaxPlayers", "10");
+    const is_private = esc(xa, cfg, "IsPrivate", "true");
+    const password = esc(xa, cfg, "ServerPassword", "");
+    const is_pve = esc(xa, cfg, "IsPvE", "true");
+    const raids = esc(xa, cfg, "IsRaidsEnabled", "false");
+    const wipe_days = esc(xa, cfg, "WipePeriodDays", "0");
+    const gather_mult = esc(xa, cfg, "GatheringSpeedMultiplier", "2.0");
+    const learn_mult = esc(xa, cfg, "LearningSpeedMultiplier", "2.0");
+    const craft_mult = esc(xa, cfg, "CraftingSpeedMultiplier", "2.0");
 
     // Build operators XML fragment (fully XML-escaped attributes)
     var ops_xml: std.ArrayList(u8) = .empty;
@@ -938,7 +963,7 @@ pub export fn gossamer_gsa_write_server_config(
         for (ops_parsed.value.array.items) |item| {
             if (item != .object) continue;
             const steam_id = S.get(item.object, "steam_id", "");
-            const name     = S.get(item.object, "name",     "");
+            const name = S.get(item.object, "name", "");
             if (steam_id.len == 0) continue;
             ops_xml.appendSlice(allocator, "    <Operator steamId=\"") catch continue;
             xmlEscapeInto(&ops_xml, allocator, steam_id) catch {};
@@ -973,11 +998,10 @@ pub export fn gossamer_gsa_write_server_config(
         \\</server-settings>
         \\
     , .{
-        server_name, description, port, max_players,
-        is_private, password, wipe_days,
-        is_pve, raids, welcome,
-        gather_mult, learn_mult, craft_mult,
-        ops_xml.items,
+        server_name, description,   port,        max_players,
+        is_private,  password,      wipe_days,   is_pve,
+        raids,       welcome,       gather_mult, learn_mult,
+        craft_mult,  ops_xml.items,
     }) catch {
         main.setErrorStr("XML format failed: out of memory");
         return @intFromEnum(main.GsaResult.out_of_memory);
@@ -986,7 +1010,9 @@ pub export fn gossamer_gsa_write_server_config(
 
     // Write to container/cryofall/Settings.xml (profile-specific in future)
     const out_path = std.fmt.allocPrint(
-        allocator, "container/{s}/Settings.xml", .{profile_id},
+        allocator,
+        "container/{s}/Settings.xml",
+        .{profile_id},
     ) catch {
         main.setErrorStr("path format failed");
         return @intFromEnum(main.GsaResult.out_of_memory);
@@ -1203,4 +1229,23 @@ test "run_script rejects path traversal" {
 test "write_server_config rejects a traversal profile_id" {
     const rc = gossamer_gsa_write_server_config("../../etc", "{}", "[]");
     try std.testing.expectEqual(@intFromEnum(main.GsaResult.invalid_param), rc);
+}
+
+test "legacy logs refuse ambiguous probes and declared inventory before executing" {
+    _ = main.gossamer_gsa_shutdown();
+    try std.testing.expectEqual(@as(c_int, 0), main.gossamer_gsa_init("http://fixture.invalid", ""));
+    defer _ = main.gossamer_gsa_shutdown();
+    const gsa = main.getGlobalHandle().?;
+    for ([_][]const u8{ "first", "second" }) |id| try gsa.trackServer(id, .{
+        .host = "unreachable-fixture.invalid",
+        .port = 25565,
+        .protocol = .MinecraftQuery,
+        .last_seen_ms = 0,
+        .healthy = false,
+    });
+    try std.testing.expectEqualStrings("ERR", std.mem.span(gossamer_gsa_get_logs(0, 10)));
+    try std.testing.expect(std.mem.indexOf(u8, std.mem.span(main.gossamer_gsa_last_error()), "ambiguous") != null);
+    try gsa.deployments.register(.{ .id = "mc", .profile_id = "minecraft-java", .host = "opaque inventory host", .runtime = .{ .type = .systemd, .identity = "mc.service" }, .game = .{ .version = "fixture" } });
+    try std.testing.expectEqualStrings("ERR", std.mem.span(gossamer_gsa_get_logs(0, 10)));
+    try std.testing.expectEqualStrings("explicit instance backend required for logs", std.mem.span(main.gossamer_gsa_last_error()));
 }

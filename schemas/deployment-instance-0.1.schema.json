@@ -1,0 +1,322 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gsa:deployment-instance:0.1.0",
+  "title": "GSA Deployment Instance 0.1.0",
+  "description": "Explicit installation identity, independently versioned from game profiles. Unknown fields (including secret fields) are rejected at every object boundary. Instance IDs are independently declared; collection ID uniqueness is checked by the fixture validator.",
+  "type": "object",
+  "required": [
+    "contract",
+    "id",
+    "profile_id",
+    "host",
+    "runtime",
+    "ports",
+    "paths",
+    "game",
+    "resources",
+    "backup",
+    "capabilities"
+  ],
+  "properties": {
+    "contract": {
+      "type": "object",
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "const": "gsa.deployment-instance"
+        },
+        "version": {
+          "const": "0.1.0"
+        }
+      },
+      "additionalProperties": false
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}(?![\\s\\S])"
+    },
+    "profile_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}(?![\\s\\S])"
+    },
+    "host": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "type": "object",
+      "required": [
+        "type",
+        "identity"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "systemd",
+            "podman",
+            "process"
+          ]
+        },
+        "identity": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "ports": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "protocol",
+          "port",
+          "purpose"
+        ],
+        "properties": {
+          "protocol": {
+            "enum": [
+              "tcp",
+              "udp"
+            ]
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535
+          },
+          "purpose": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "paths": {
+      "type": "object",
+      "required": [
+        "data",
+        "config",
+        "world"
+      ],
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        },
+        "config": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        },
+        "world": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^/"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "game": {
+      "type": "object",
+      "required": [
+        "version",
+        "mods"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "update_channel": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional opaque deployment metadata. Omission or null means unspecified; no update policy or universal channel semantics are implied."
+        },
+        "mods": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "version"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}(?![\\s\\S])"
+              },
+              "version": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "resources": {
+      "type": "object",
+      "required": [
+        "memory"
+      ],
+      "properties": {
+        "memory": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "minimum": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[1-9][0-9]{0,14}[KMGT](?![\\s\\S])"
+            },
+            "maximum": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[1-9][0-9]{0,14}[KMGT](?![\\s\\S])"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "backup": {
+      "type": "object",
+      "required": [],
+      "properties": {
+        "policy_ref": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}(?![\\s\\S])"
+        }
+      },
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "required": [
+        "probe",
+        "config",
+        "logs",
+        "lifecycle",
+        "backup"
+      ],
+      "properties": {
+        "probe": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "mode"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "read-only"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "config": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "mode"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "read-only"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "logs": {
+          "type": "object",
+          "required": [
+            "enabled",
+            "mode"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "mode": {
+              "enum": [
+                "read-only"
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "lifecycle": {
+          "type": "object",
+          "required": [
+            "start",
+            "stop",
+            "restart",
+            "update"
+          ],
+          "properties": {
+            "start": {
+              "type": "boolean"
+            },
+            "stop": {
+              "type": "boolean"
+            },
+            "restart": {
+              "type": "boolean"
+            },
+            "update": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "backup": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,53 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Deployment Instance Identity: First Contract Slice
+:revdate: 2026-10-25
+:status: proposed, fixture/test-only
+
+A game profile describes a game. A deployment instance describes one concrete
+installation. `minecraft-survival`, `minecraft-creative`, and
+`minecraft-modded` all reference `minecraft-java`, while retaining independent
+runtime identities, ports, data, and worlds. A profile-keyed registry alone
+cannot represent these installations without conflating game and deployment
+identity or duplicating the profile.
+
+The proposed `gsa.deployment-instance` contract starts at `0.1.0`, independently
+of `gsa.game-profile` and its configuration/capability versions. An explicit
+stable instance ID survives changes to ports, paths, runtime, and game version.
+Neither profile identity nor runtime identity is used to generate it. Callers
+must keep `id` and `profile_id` semantically distinct even when their supplied
+string values coincide, as is valid for a singleton deployment. Equality does
+not establish derivation. No current registry collision requires prohibition:
+these documents are not loaded by the legacy registry. Instance IDs must be
+unique within a supplied collection, including across hosts. Persistence and
+rename policy remain undecided.
+
+`game.update_channel` is optional opaque metadata; omission or null means
+unspecified. Games may record Steam branches, snapshots, loader tracks, or
+other game-owned labels without adopting universal `stable`/`beta` semantics.
+GSA neither interprets these labels nor selects or executes updates. This is
+deployment metadata, not a package or update system.
+
+The first slice comprises a strict JSON Schema, synthetic fixtures, an inert
+Zig validator imported only by tests, and an offline schema-check recipe.
+The three Minecraft fixtures share a synthetic host, but use distinct service
+identities, TCP ports 25565–25567, and data/world paths. A Barotrauma fixture
+exercises Podman identity and UDP without contacting Podman. A singleton
+Minecraft fixture explicitly uses `id == profile_id`. These are examples,
+not verified inventories or changes to `wizardly-hellman`.
+
+GSA is an optional control plane, not runtime authority. Instance documents do
+not imply ownership of process startup. A game server must start and continue
+running independently if GSA fails. A declared lifecycle or backup capability
+is descriptive/authorization-oriented metadata; even `true` grants no execution
+in this slice. Validation performs no discovery, commands, provisioning,
+backup, secret resolution, or systemd/Podman calls.
+
+See link:GAME-PROFILE-CONTRACT.adoc[the contract boundary] for the exact field
+rules and validation limitations. Next decisions concern canonical ownership,
+version compatibility, identity scope/renames, host identity, runtime-specific
+identity rules, resource ordering/units, collision detection, external secret
+references, backup-policy authority, and authorization/audit rules. Registry,
+API, persistence, GUI, provisioning and migration wiring are deferred; none is
+implicitly approved by this contract. The 18 legacy A2ML profiles remain
+compatibility data, with no new A2ML authoring or migration.

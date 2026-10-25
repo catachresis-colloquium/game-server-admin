@@ -1,0 +1,6 @@
+{
+  "instance_id": "minecraft-survival",
+  "unit": "minecraft-survival.service",
+  "observed_at_unix_seconds": 1792929600,
+  "systemctl_show": "Id=minecraft-survival.service\nLoadState=loaded\nActiveState=inactive\n"
+}

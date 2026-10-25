@@ -1,0 +1,206 @@
+{
+  "status": "executable selection acceptance cases; no lifecycle execution",
+  "operations": [
+    "status",
+    "logs",
+    "config_lookup",
+    "probe",
+    "server_action"
+  ],
+  "cases": [
+    {
+      "name": "one-profile-one-instance",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        }
+      ],
+      "request": {
+        "profile_id": "minecraft-java"
+      },
+      "expected": {
+        "category": "found",
+        "instance_id": "minecraft-survival"
+      }
+    },
+    {
+      "name": "one-profile-many-explicit",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        },
+        {
+          "id": "minecraft-modded",
+          "profile_id": "minecraft-java",
+          "host": "fixture-remote.invalid",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-modded.service"
+          }
+        }
+      ],
+      "request": {
+        "instance_id": "minecraft-modded"
+      },
+      "expected": {
+        "category": "found",
+        "instance_id": "minecraft-modded",
+        "host": "fixture-remote.invalid"
+      }
+    },
+    {
+      "name": "unknown-instance-no-profile-fallback",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        }
+      ],
+      "request": {
+        "instance_id": "unknown"
+      },
+      "expected": {
+        "category": "not_found",
+        "dispatches": 0
+      }
+    },
+    {
+      "name": "legacy-ambiguous",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        },
+        {
+          "id": "minecraft-modded",
+          "profile_id": "minecraft-java",
+          "host": "fixture-remote.invalid",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-modded.service"
+          }
+        }
+      ],
+      "request": {
+        "profile_id": "minecraft-java"
+      },
+      "expected": {
+        "category": "ambiguous",
+        "dispatches": 0
+      }
+    },
+    {
+      "name": "legacy-no-candidates",
+      "entries": [],
+      "request": {
+        "profile_id": "minecraft-java"
+      },
+      "expected": {
+        "category": "not_found",
+        "dispatches": 0
+      }
+    },
+    {
+      "name": "duplicate-registration-across-hosts",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        }
+      ],
+      "register": {
+        "id": "minecraft-survival",
+        "profile_id": "minecraft-java",
+        "host": "fixture-remote.invalid",
+        "runtime": {
+          "type": "systemd",
+          "identity": "mc-modded.service"
+        }
+      },
+      "expected": {
+        "category": "duplicate",
+        "original_preserved": true,
+        "dispatches": 0
+      }
+    },
+    {
+      "name": "coincident-instance-profile-strings",
+      "entries": [
+        {
+          "id": "minecraft-java",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        }
+      ],
+      "request": {
+        "instance_id": "minecraft-java"
+      },
+      "expected": {
+        "category": "found",
+        "instance_id": "minecraft-java"
+      }
+    },
+    {
+      "name": "profile-registry-unaffected",
+      "entries": [
+        {
+          "id": "minecraft-survival",
+          "profile_id": "minecraft-java",
+          "host": "localhost",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-survival.service"
+          }
+        },
+        {
+          "id": "minecraft-modded",
+          "profile_id": "minecraft-java",
+          "host": "fixture-remote.invalid",
+          "runtime": {
+            "type": "systemd",
+            "identity": "mc-modded.service"
+          }
+        }
+      ],
+      "request": {
+        "legacy_profile_lookup": "minecraft-java"
+      },
+      "expected": {
+        "category": "profile_found",
+        "installation_count": 2,
+        "dispatches": 0
+      }
+    }
+  ]
+}

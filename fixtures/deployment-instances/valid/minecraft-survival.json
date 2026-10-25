@@ -1,0 +1,68 @@
+{
+  "contract": {
+    "name": "gsa.deployment-instance",
+    "version": "0.1.0"
+  },
+  "id": "minecraft-survival",
+  "profile_id": "minecraft-java",
+  "host": "fixture-host",
+  "runtime": {
+    "type": "systemd",
+    "identity": "gsa-fixture-minecraft-survival.service"
+  },
+  "ports": [
+    {
+      "protocol": "tcp",
+      "port": 25565,
+      "purpose": "game"
+    }
+  ],
+  "paths": {
+    "data": [
+      "/srv/gsa-fixtures/minecraft-survival"
+    ],
+    "config": [
+      "/srv/gsa-fixtures/minecraft-survival/server.properties"
+    ],
+    "world": [
+      "/srv/gsa-fixtures/minecraft-survival/world"
+    ]
+  },
+  "game": {
+    "version": "1.21.11",
+    "update_channel": "pinned",
+    "mods": []
+  },
+  "resources": {
+    "memory": {
+      "minimum": "1G",
+      "maximum": "2G"
+    }
+  },
+  "backup": {
+    "policy_ref": "minecraft-world-backup"
+  },
+  "capabilities": {
+    "probe": {
+      "enabled": true,
+      "mode": "read-only"
+    },
+    "config": {
+      "enabled": true,
+      "mode": "read-only"
+    },
+    "logs": {
+      "enabled": true,
+      "mode": "read-only"
+    },
+    "lifecycle": {
+      "start": false,
+      "stop": false,
+      "restart": false,
+      "update": false
+    },
+    "backup": {
+      "enabled": false
+    }
+  }
+}

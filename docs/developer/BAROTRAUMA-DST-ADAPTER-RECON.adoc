@@ -1,0 +1,245 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Barotrauma and Don't Starve Together Adapter Reconnaissance
+:revdate: 2026-10-25
+:status: research/design only; no deployment or migration
+
+== Evidence boundary
+
+The queued plan supplies the host facts: a preserved stopped Barotrauma Podman
+container, existing volume and campaign save, UDP 27015 game/27016 query, and
+Steam dedicated-server AppID 1026340. They are not a fresh host inventory.
+No live container/service/volume, campaign file, token, credential, firewall,
+startup policy or configuration was read or modified during this task.
+
+Repository observations below refer to main commit 8f089ac. Upstream source/
+documentation was read on 2026-10-25. Floating upstream master and historical
+setup guides do not establish installed-build behavior; verify version-specific
+save/shutdown semantics in a disposable installation before enabling operations.
+
+== Current GSA conventions and gaps
+
+profiles/barotrauma.a2ml declares the supplied ports/AppID, a DedicatedServer
+binary, /config/serversettings.xml, a campaign mount under the installation,
+and Podman start/stop/update/log actions. profiles/dst.a2ml declares AppID
+343050, the nullrenderer executable, cluster.ini, game/query/Steam ports and a
+single container; its text acknowledges shards but does not model their identity.
+
+These are legacy compatibility descriptors, not verified live mount maps.
+Do not add or rewrite A2ML. Neither game has a checked-in dedicated container
+directory/Quadlet in this snapshot. scripts/provision-server.sh hard-codes only
+CryoFall, Valheim and Minecraft Java; it is not an implemented Barotrauma/DST
+provisioner. Its document IDs derive from profile IDs, so do not reuse them for
+multiple installations.
+
+container/cryofall provides a Quadlet/entrypoint/backup example, but its Quadlet
+Requires=gsa-verisimdb.service would make that server depend on a GSA component.
+That is an existing compatibility artifact, left unchanged here, and must NOT
+be copied into these designs. Its tar-on-live-directory backup is not evidence
+of application consistency for Barotrauma or DST.
+
+== Barotrauma
+
+=== Runtime and persistence proposal
+
+Use an explicit instance ID, a dedicated game-owner account, and one independently
+startable systemd service generated from a Podman Quadlet. Choose user/system
+manager scope after confirming the existing container/volume ownership. A
+rootless user service may need an operator-selected login/linger policy; this
+note enables nothing. There must be no Requires/BindsTo/ExecStart dependency on
+GSA, its registry or VeriSimDB.
+
+A stopped preserved container must not be removed or recreated merely to satisfy
+a new Quadlet name. First record an authorized sanitized mount/image/ownership
+inventory, verify an offline backup and a disposable restore, then plan adoption
+or a distinct container with the same explicitly selected persistent storage.
+No adoption procedure is executed here.
+
+Keep installation files distinct from persistent campaign/config state. Upstream
+SaveUtil uses the platform local application-data directory with
+Daedalic Entertainment GmbH/Barotrauma/Multiplayer, or a configured SavePath
+with its multiplayer subdirectory. Container HOME/XDG mapping and an overridden
+save path can change the actual volume location. Preserve the whole selected
+campaign tree, including companion character XML/backups, relevant custom
+submarines/content packages, and configuration; do not archive only a .save file.
+Permissions/config contain sensitive data and must not become public inspection
+output. The old profile's installation-relative mount is not authority for where
+the existing campaign actually lives. [B1]
+
+=== Update and consistency proposal
+
+The SteamCMD AppID is 1026340; official hosting documentation supports anonymous
+download and an app_update flow. For a later implementation, record the installed
+build and mod/content manifest, stop safely, preserve a verified save/config
+snapshot, stage/update the installation, validate the selected content, then
+start and health-check only with explicit authorization. An optional channel/
+branch is opaque metadata, not GSA selecting stable/beta semantics. Do not patch
+the active installation or run updates at game startup as a GSA prerequisite.
+The official wiki warns its hosting guide may be outdated. [B2]
+
+A stopped-on-disk archive is possible after verified process exit and storage
+quiescence, but does not prove current mid-round progress was checkpointed.
+Application-consistent backup needs build/game-specific save acknowledgement.
+SaveUtil's built-in backup logic includes campaign and character data; generic
+tar while running is not an equivalent transaction. Retention, access controls,
+restore validation, mods/build compatibility and who owns backup execution must
+be explicit. [B1]
+
+=== Graceful shutdown finding and blocker
+
+Upstream DebugConsole registers exit/quit/close to end the main loop. Program
+explicitly ignores redirected stdin; an echo-to-pipe ExecStop proposal is
+therefore unsupported. GameServer.Quit saves settings/bans and closes network/
+Steam state, but the inspected method does not itself save a campaign. A clean
+process exit must not be advertised as a guaranteed mid-round campaign save.
+These are source observations, not proof about the preserved installed build.
+[B3] [B4] [B5]
+
+Before implementing shutdown, validate an actual supported command/control path
+in a disposable build (interactive console/PTY or game-authorized administration),
+its checkpoint semantics, and the container signal forwarding/timeout behavior.
+Do not assume SIGTERM or Podman stop's eventual SIGKILL gives a clean saved
+campaign. If a tested safe path does not exist, lifecycle and consistent live
+backup remain unsupported; the preserved stopped volume stays intact.
+
+=== Config and health
+
+Discover the executable working directory and selected serversettings.xml
+without guessing /config from the legacy profile. Upstream startup reads that
+XML and accepts command-line overrides for game/query ports; effective values
+need override precedence and secret filtering. [B6]
+Project only allowed config fields, never password, full XML or environment.
+Inspect state/uptime/unit and attribute UDP listeners to the selected process;
+then query the configured A2S endpoint through the existing GSA probe abstraction.
+A bound socket or active service alone proves neither campaign readiness nor
+external reachability. Query behavior/mod compatibility requires fixtures and a
+disposable-server test; no live probe is performed here.
+
+== Don't Starve Together
+
+=== Topology, identity and paths
+
+Klei documents two separate dedicated-server processes launched with the same
+cluster argument and different shard arguments, typically Master and Caves.
+The data path is persistent_storage_root/conf_dir/cluster, containing cluster.ini
+and each shard's server.ini and saves; command-line options can change the
+root/config/cluster/shard paths. Treat cluster_token.txt, cluster passwords and
+the inter-shard cluster key as secrets and keep values external to reports. [D1]
+
+Each shard needs its own runtime identity (for example, distinct generated
+systemd services/containers). A shared installation may serve both processes,
+but updates must stop both before modifying shared binaries. Preserve the whole
+cluster consistently, not unrelated snapshots of Master and Caves, and include
+mod setup/override metadata without exposing credentials.
+
+Klei's settings guide distinguishes client game ports, per-process Steam
+authentication/query ports, and the master's inter-shard port. A synthetic,
+non-binding allocation for review is:
+
+[cols="1,1,1,1",options="header"]
+|===
+|Shard |Game UDP |Steam authentication |Steam server/query
+|Master |10999 |8766 |27016
+|Caves |11000 |8767 |27017
+|===
+
+The inter-shard master port can be a separately selected loopback port such as
+10888 for same-host shards; other shards connect to the master's address/port.
+This table is an example, not a firewall or deployment configuration. Existing
+profile defaults do not allocate the second shard or make these values universal.
+Resolve effective command-line overrides, inspect actual listeners and avoid
+collisions with other games. Cross-host clusters need explicitly secured
+inter-shard connectivity and synchronized cluster settings. [D1] [D2]
+
+=== Which installation identity?
+
+[cols="1,2,2",options="header"]
+|===
+|Choice |Benefit |Missing meaning
+|One instance for cluster |Matches player-facing world/backup intent |One v0.1.0
+runtime identity cannot select both shard services safely.
+|One instance per shard |Each runtime/probe/log target is explicit |No shared
+cluster identity or coordinated save/update/backup relation.
+|Cluster parent with component instances |Separates operator intent from
+individual runtime targets |Needs an approved parent/component relationship,
+partial-health semantics and operation authorization/aggregation.
+|===
+
+The preferred direction for review is an explicit cluster parent with shard
+components, but it is NOT adopted or implemented. The fixture-only instance v0.1.0
+does not encode this topology. Do not invent a list inside runtime.identity,
+overload profile identity, silently select Master, or merge shard paths into an
+apparently atomic single-runtime deployment. This blocks a DST implementation
+until maintainers choose a representable versioned model.
+
+=== Update, shutdown, backup and inspection
+
+The legacy profile records dedicated-server AppID 343050; Klei's historical
+Linux setup guide describes SteamCMD and a shared cluster configuration. Any
+later updater should confirm the installed build/app metadata, stop both
+selected shards safely, stage/validate one coordinated binary+mod version, and
+restart only the previously running approved topology. No updater is added.
+[D3]
+
+A later backup must coordinate both shards and shared cluster files at a known
+checkpoint. A filesystem copy of one active shard cannot establish a consistent
+cluster. Klei-hosted historical console guidance describes c_shutdown with
+saving and console-input prerequisites; it is not evidence that signals,
+redirected stdin or a given wrapper/container implement that path today. Pin
+the installed scripts/build and test per-shard save/shutdown acknowledgements
+and full-cluster restore before promising consistency. If the control path is
+absent, advertise unsupported hot backup and require an operator-approved clean
+whole-cluster stop/checkpoint. Never substitute c_shutdown(false). [D4]
+
+Read-only inspection should bind each process to explicit cluster/shard args,
+project nonsecret cluster.ini/server.ini fields, attribute listeners, and report
+per-shard plus aggregate readiness. Parent health is incomplete when a required
+shard is missing. Existing GSA A2S transport may be reused once the installed
+shard's actual query endpoint is fixture-tested. A cluster token or shared
+directory does not establish that all shards are healthy.
+
+== Blockers and next safe contribution
+
+Barotrauma: exact preserved volume/container mapping, installed build, tested
+checkpoint+shutdown transport and complete restore scope remain unverified.
+DST: parent/component identity decision and coordinated operations are blocking.
+Both: stable selected-instance API, authorization, backup ownership, effective
+config precedence, read-only data minimization and access/error reporting need
+review. Follow-up work should add synthetic adapter fixtures and disposable-game
+verification, not alter wizardly-hellman or copy legacy defaults into production.
+
+== Sources and reproducibility
+
+Repository paths above were inspected at main 8f089ac; all upstream sources
+below were inspected on 2026-10-25. Barotrauma source references point to master;
+the listed blob hashes identify the reviewed content and are not release tags.
+
+* [B1] https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaShared/SharedSource/Utils/SaveUtil.cs[SaveUtil.cs],
+  blob f087276a6231394553fec4c82881591f0aa623e4.
+* [B2] https://barotraumagame.com/wiki/Hosting_a_Dedicated_Server[Official hosting guide]
+  (explicitly marked potentially outdated).
+* [B3] https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaServer/ServerSource/DebugConsole.cs[DebugConsole.cs],
+  blob bdca951634e5e8539b4e64ca51d69a459b7e6be4.
+* [B4] https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaServer/ServerSource/Program.cs[Program.cs],
+  blob 5fb8fe15c4b81aa8d57d275ca358b94e4e5b71ed.
+* [B5] https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaServer/ServerSource/Networking/GameServer.cs[GameServer.cs],
+  blob 2053695548f6387d9c05cb8daa03698acc8e3306.
+* [B6] https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaServer/ServerSource/GameMain.cs[GameMain.cs],
+  blob 2d50a32eaf39e43001a78f4c84969c776dfb21d0.
+* [D1] https://support.klei.com/hc/en-us/articles/360029556192-Dedicated-Server-Command-Line-Options-Guide[Klei command-line reference].
+* [D2] https://kleiforums.com/forums/topic/64552-dedicated-server-settings-guide/[Klei settings guide]
+  (historical guide; validate effective settings for the installed version).
+* [D3] https://kleiforums.com/forums/topic/64441-dedicated-server-quick-setup-guide-linux/[Klei Linux setup guide]
+  (historical, not a prescription to install old dependencies).
+* [D4] https://kleiforums.com/forums/topic/51535-stopping-dedicated-server-gracefully/[Klei-hosted console discussion]
+  (historical examples, not a verified current control transport).
+
+== Contract reference in this branch
+
+This branch includes the reviewed deployment-instance base from PR #112; it
+does not assume that PR has merged into main. See
+link:GAME-PROFILE-CONTRACT.adoc[the actual fixture contract boundary] and
+link:DEPLOYMENT-INSTANCE-DESIGN.adoc[the instance identity design]. The contract
+has one runtime identity and no parent/component or resource-group relation.
+These design limits do not authorize new fields, lifecycle execution or live
+deployment changes.

@@ -1,0 +1,118 @@
+[
+  {
+    "file": "missing-id.json",
+    "zig_error": "MissingField",
+    "schema_keyword": "required"
+  },
+  {
+    "file": "missing-profile-id.json",
+    "zig_error": "MissingField",
+    "schema_keyword": "required"
+  },
+  {
+    "file": "missing-host.json",
+    "zig_error": "MissingField",
+    "schema_keyword": "required"
+  },
+  {
+    "file": "invalid-port.json",
+    "zig_error": "InvalidPort",
+    "schema_keyword": "maximum"
+  },
+  {
+    "file": "invalid-protocol.json",
+    "zig_error": "InvalidEnumTag",
+    "schema_keyword": "enum"
+  },
+  {
+    "file": "malformed-runtime.json",
+    "zig_error": "MissingField",
+    "schema_keyword": "required"
+  },
+  {
+    "file": "invalid-runtime-type.json",
+    "zig_error": "InvalidEnumTag",
+    "schema_keyword": "enum"
+  },
+  {
+    "file": "malformed-resource.json",
+    "zig_error": "InvalidResourceLimit",
+    "schema_keyword": "pattern"
+  },
+  {
+    "file": "inline-secret.json",
+    "zig_error": "UnknownField",
+    "schema_keyword": "additionalProperties"
+  },
+  {
+    "file": "nested-inline-secret.json",
+    "zig_error": "UnknownField",
+    "schema_keyword": "additionalProperties"
+  },
+  {
+    "file": "malformed-capability-mode.json",
+    "zig_error": "InvalidEnumTag",
+    "schema_keyword": "enum"
+  },
+  {
+    "file": "malformed-capability-flag.json",
+    "zig_error": "UnexpectedToken",
+    "schema_keyword": "type"
+  },
+  {
+    "file": "invalid-id.json",
+    "zig_error": "InvalidIdentity",
+    "schema_keyword": "pattern"
+  },
+  {
+    "file": "relative-path.json",
+    "zig_error": "InvalidPath",
+    "schema_keyword": "pattern"
+  },
+  {
+    "file": "wrong-contract.json",
+    "zig_error": "UnsupportedInstanceContract",
+    "schema_keyword": "const"
+  },
+  {
+    "file": "unsupported-version.json",
+    "zig_error": "UnsupportedInstanceContract",
+    "schema_keyword": "const"
+  },
+  {
+    "file": "duplicate-instance-id.json",
+    "zig_error": "DuplicateInstanceId",
+    "semantic_error": "DuplicateInstanceId",
+    "collection": true
+  },
+  {
+    "file": "numeric-string-port.json",
+    "zig_error": "UnexpectedToken",
+    "schema_keyword": "type"
+  },
+  {
+    "file": "fractional-port.json",
+    "zig_error": "InvalidNumber",
+    "schema_keyword": "type"
+  },
+  {
+    "file": "numeric-runtime-type.json",
+    "zig_error": "InvalidEnumTag",
+    "schema_keyword": "enum"
+  },
+  {
+    "file": "malformed-contract-version.json",
+    "zig_error": "UnsupportedInstanceContract",
+    "schema_keyword": "const"
+  },
+  {
+    "file": "malformed-update-channel.json",
+    "zig_error": "UnexpectedToken",
+    "schema_keyword": "type"
+  },
+  {
+    "file": "precision-fractional-port.json",
+    "zig_error": "InvalidNumber",
+    "schema_keyword": "type"
+  }
+]

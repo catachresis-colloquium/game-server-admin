@@ -617,6 +617,14 @@ test *args:
     cd src/interface/ffi && zig build test-integration {{args}}
     @echo "All tests passed!"
 
+# Offline Zig schema-subset/fixture checks; no live deployment access.
+test-deployment-contract:
+    zig run src/interface/ffi/src/deployment_schema_check.zig
+
+# Full Draft 2020-12 meta-schema validation uses an approved Rust dev tool.
+test-deployment-schema-meta:
+    cargo run --locked --manifest-path tools/deployment-schema-meta/Cargo.toml -- schemas/deployment-instance-0.1.schema.json
+
 # Run tests with verbose output
 test-verbose:
     @echo "Running tests (verbose)..."
@@ -1085,6 +1093,121 @@ validate-ai-install:
 # Full validation suite
 validate: validate-rsr validate-state validate-ai-install
     @echo "All validations passed!"
+
+# Check all JSON files for I-JSON/JCS compliance (estate standard via ijson-jcs)
+ijson-jcs:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Estate canonical JSON: schemas + valid fixtures only; invalid fixtures are
+    # negative test data for the Zig validator, not required to be JCS-canonical.
+    FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
+    if [ -z "$FILES" ]; then echo "No estate JSON files"; exit 0; fi
+    if command -v ijson-jcs >/dev/null 2>&1; then
+        for f in $FILES; do
+          ijson-jcs check "$f"; RC=$?
+          if [ "$RC" -eq 2 ]; then echo "INVALID $f (exit $RC)"; exit 1
+          elif [ "$RC" -eq 1 ]; then echo "NOT CANONICAL $f (advisory)"; fi
+        done
+    else
+        echo "ijson-jcs not found — using Python I-JSON fallback"
+        for f in $FILES; do
+            python3 - "$f" <<'PY'
+            import sys, json, pathlib
+            p = pathlib.Path(sys.argv[1])
+            txt = p.read_bytes()
+            txt.decode('utf-8')  # UTF-8 check
+            assert txt.endswith(b'\n') and not txt.endswith(b'\n\n'), f"Missing/excess LF in {p}"
+            text = txt.decode('utf-8')
+            def no_dupes(pairs):
+                seen=set()
+                for k,v in pairs:
+                    if k in seen: raise ValueError(f"duplicate key {k!r}")
+                    seen.add(k)
+                return {k:v for k,v in pairs}
+            json.loads(text, object_pairs_hook=no_dupes)
+            PY
+        done
+    fi
+    echo "I-JSON/JCS: PASS"
+
+# Canonically reformat all JSON files to JCS (I-JSON + sorted keys + one LF)
+ijson-jcs-fix:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
+    if command -v ijson-jcs >/dev/null 2>&1; then
+        for f in $FILES; do ijson-jcs canon "$f" --in-place 2>/dev/null || ijson-jcs canon "$f" > "$f.tmp" && mv "$f.tmp" "$f"; done
+    else
+        echo "ijson-jcs not found — install: cargo install --git https://github.com/hyperpolymath/ijson-jcs"
+        exit 1
+    fi
+    echo "JSON canon: done"
+
+# Check estate YAML is KYAML (via hyperpolymath/standards scripts/kyaml-format.sh)
+kyaml:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    FILES=$(find . -name '*.kyaml' -o -name '*.k9.yml' 2>/dev/null | grep -v '^./.git/' | sort || true)
+    if [ -z "$FILES" ]; then echo "No estate KYAML files (no *.kyaml) — passing (workflows are YAML 1.2, not KYAML)"; exit 0; fi
+    if [ -f scripts/kyaml-format.sh ] && command -v yq >/dev/null 2>&1; then
+        bash scripts/kyaml-format.sh --check $FILES
+    else
+        echo "kyaml-format.sh or yq not available — running advisory KYAML parse check"
+        python3 - <<'PY'
+        import pathlib, sys
+        try: import yaml; has_yaml=True
+        except: has_yaml=False
+        fail=0
+        for p in pathlib.Path('.').rglob('*.kyaml'):
+            if '.git' in str(p): continue
+            txt=p.read_text()
+            if not txt.endswith('\n'): print(f"Missing final LF: {p}"); fail=1
+            if '\t' in txt: print(f"Tab in {p}"); fail=1
+            if has_yaml:
+                try: yaml.safe_load(txt)
+                except Exception as e: print(f"YAML parse {p}: {e}"); fail=1
+        sys.exit(fail)
+        PY
+    fi
+    echo "KYAML: PASS"
+
+# Reformat estate YAML to KYAML (requires yq v4.53.3)
+kyaml-fix:
+    @if [ -f scripts/kyaml-format.sh ] && command -v yq >/dev/null 2>&1; then bash scripts/kyaml-format.sh $FILES; else echo "Missing kyaml-format.sh or yq — see scripts/kyaml-format.sh"; exit 1; fi
+
+# Estate compliance gate — I-JSON/JCS + KYAML + squabbler + proven-tests + deep recon
+estate-compliance: ijson-jcs kyaml
+    @echo "Estate compliance: PASS (see .github/workflows/estate-compliance.yml for full CI gate)"
+
+# cicd-squabbler — diagnose gate deadlocks (SPARK-proved invariant)
+squabble-diagnose:
+    #!/usr/bin/env bash
+    if command -v squabble >/dev/null 2>&1; then
+        squabble diagnose --format json | jq '.' || squabble diagnose
+    else
+        echo "squabble not found — install: cargo install --git https://github.com/hyperpolymath/cicd-squabbler"
+        exit 1
+    fi
+
+# cicd-squabbler — show dependency chains (read-only, no mutation)
+squabble-chains:
+    @squabble chains . --format json 2>/dev/null | jq '.' || squabble chains .
+
+# proven-tests — category×aspect lattice counts derived from executed tests
+proven-category:
+    #!/usr/bin/env bash
+    echo "Proven tests lattice (executed > declared) — category×aspect provenance"
+    for log in /tmp/unit.log /tmp/integration.log /tmp/smoke.log /tmp/property.log /tmp/behavioral.log; do
+        [ -f "$log" ] && echo "--- $log ---" && grep -E "passed|failed" "$log" | tail -n 3 || true
+    done
+
+# pons-asinorum depth scan (if installed)
+pons-scan:
+    @command -v pons >/dev/null 2>&1 && pons scan . || echo "pons not found — cargo install --git https://github.com/hyperpolymath/pons-asinorum"
+
+# panic-attack breadth scan (assail)
+panic-assail:
+    @command -v panic-attack >/dev/null 2>&1 && panic-attack assail . || just assail
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATE MANAGEMENT

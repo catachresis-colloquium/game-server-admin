@@ -38,13 +38,31 @@ fi
 tarball="zig-x86_64-linux-${ZIG_VERSION}.tar.xz"
 url="https://ziglang.org/download/${ZIG_VERSION}/${tarball}"
 
-dest_root="${RUNNER_TEMP:?RUNNER_TEMP must be set (GitHub Actions)}"
+if [ -n "${RUNNER_TEMP:-}" ]; then
+  dest_root="$RUNNER_TEMP"
+elif [ -n "${TMPDIR:-}" ]; then
+  dest_root="$TMPDIR"
+else
+  dest_root="/tmp"
+fi
 work="${dest_root}/zig-download"
-dest="${dest_root}/zig-${ZIG_VERSION}"
+if [ -n "${RUNNER_TEMP:-}" ]; then
+  dest="${dest_root}/zig-${ZIG_VERSION}"
+else
+  dest="${HOME:-/tmp}/.local/zig-${ZIG_VERSION}"
+fi
 mkdir -p "$work" "$dest"
 
 curl --proto '=https' --tlsv1.2 -fsSL --retry 5 --retry-delay 5 \
-  -o "${work}/${tarball}" "$url"
+  -o "${work}/${tarball}" "$url" || {
+    echo "::warning::Primary ziglang.org fetch failed — trying GitHub mirror"
+    gh_url="https://github.com/ziglang/zig/releases/download/${ZIG_VERSION}/zig-${arch}-linux-${ZIG_VERSION}.tar.xz"
+    # Fallback name may differ; try the ziglang.org tarball name via codeload if needed
+    curl -fsSL --retry 3 -o "${work}/${tarball}" "$gh_url" || {
+      echo "::error::Failed to fetch Zig ${ZIG_VERSION} from both ziglang.org and GitHub mirror" >&2
+      exit 1
+    }
+  }
 
 echo "${ZIG_SHA256_X86_64_LINUX}  ${work}/${tarball}" | sha256sum -c -
 
@@ -57,5 +75,13 @@ if [[ "$got" != "$ZIG_VERSION" ]]; then
   exit 1
 fi
 
-echo "$dest" >> "${GITHUB_PATH:?GITHUB_PATH must be set (GitHub Actions)}"
-echo "Installed zig ${got} at ${dest}"
+if [ -n "${GITHUB_PATH:-}" ]; then
+  echo "$dest" >> "$GITHUB_PATH"
+  echo "Installed zig ${got} at ${dest} (added to GITHUB_PATH)"
+else
+  # Local / non-Actions install: ensure on PATH via symlink
+  mkdir -p "${HOME:-/tmp}/.local/bin"
+  ln -sf "${dest}/zig" "${HOME:-/tmp}/.local/bin/zig"
+  export PATH="${HOME:-/tmp}/.local/bin:$PATH"
+  echo "Installed zig ${got} at ${dest} (symlinked to ${HOME:-/tmp}/.local/bin/zig)"
+fi
