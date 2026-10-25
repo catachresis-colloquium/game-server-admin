@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 = Draft Game-Profile Contract and Fixture Boundary
-:revdate: 2026-10-18
+:revdate: 2026-10-25
 :status: draft, test-only; not a canonical contract
 
 [IMPORTANT]
@@ -38,10 +38,10 @@ runtime enum identifiers or accepted production defaults.
 
 A descriptor identifies `contract.name = gsa.game-profile` and
 `contract.version = 0.1.0-draft`; the configuration schema and each optional
-capability carry their own version. No deployment-instance contract is defined
-in this slice. If introduced, deployment-instance identity/operations should
-remain separately versioned instead of being folded into profile or session
-summary data. Configuration fields are declarative and
+capability carry their own version. Deployment instances use the separate
+fixture/test-only `gsa.deployment-instance` contract described below; instance
+identity is not folded into profile or session-summary data. Configuration
+fields are declarative and
 support `string`, `integer`, `number`, `boolean`, `enum`, and opaque `secret-ref`
 values. Each field declares whether it is required and classifies visibility as
 `player`, `operator`, or `secret`. The validator rejects unknown submitted
@@ -112,6 +112,93 @@ validation. Full GitHub CI, live integration, and compatibility with an actual
 SOP server remain unverified. Existing A2ML parser/registry behavior is
 intentionally unchanged; its existing tests remain the compatibility guard.
 
+== Deployment-instance contract 0.1.0 (fixture/test-only)
+
+A game profile describes a game; an instance describes a concrete installation.
+One profile may have many instances. The three Minecraft fixtures share
+`profile_id: minecraft-java` but have independent IDs, runtime identities,
+ports, and data/world paths. See
+link:DEPLOYMENT-INSTANCE-DESIGN.adoc[the motivating design note].
+
+`schemas/deployment-instance-0.1.schema.json` uses Draft 2020-12 and has its own
+contract name/version: `gsa.deployment-instance`, `0.1.0`. This schema accepts
+that exact version, not arbitrary future versions; each version needs explicit
+support. It is separate from the draft game-profile contract. All listed blocks
+and their members are required except `game.update_channel`; arrays may be
+empty to explicitly declare no entries. No operational defaults are inferred.
+Unknown keys are forbidden at every object boundary, following the existing
+profile schema policy.
+
+[cols="1,3",options="header"]
+|===
+|Field |Shape and constraints
+|`contract` |`name` exactly `gsa.deployment-instance`; `version` exactly `0.1.0`.
+|`id`, `profile_id` |Explicit strings matching `^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$`.
+Instance ID is stable and independent of the referenced game profile.
+|`host` |Nonempty opaque host identifier; no DNS or inventory lookup.
+|`runtime` |`type`: `systemd`, `podman`, or `process`; `identity`: nonempty
+opaque string. These are a closed initial set, not implemented adapters.
+|`ports` |Array of objects: `protocol`: `tcp` or `udp`; integer `port`: 1–65535;
+`purpose`: nonempty string.
+|`paths` |`data`, `config`, `world`: arrays of explicit absolute POSIX path
+strings beginning with `/`. Paths are never accessed, normalized, or expanded.
+|`game` |Nonempty `version`; optional opaque string `update_channel` (omission
+or null means unspecified); `mods`: array of objects with identifier-shaped
+`id` and nonempty `version`. Version and channel strings are game-owned, not
+necessarily semantic versions or universal release tracks. GSA assigns no
+`stable`/`beta` meaning, resolves no branches, and performs no updates.
+|`resources` |`memory.minimum` and `memory.maximum`: positive integers of 1–15
+digits followed by `K`, `M`, `G`, or `T`, meaning binary units (powers of 1024).
+No leading zeroes, signs, fractions, or unitless values. Ordering and host
+capacity are not checked in this first structural contract.
+|`backup` |Identifier-shaped `policy_ref`, opaque and unresolved.
+|`capabilities` |`probe`, `config`, `logs`: each has boolean `enabled` and mode
+exactly `read-only`; `lifecycle`: boolean `start`, `stop`, `restart`, `update`;
+`backup`: boolean `enabled`.
+|===
+
+`deployment_instance_contract.zig` is adjacent to `profile_contract.zig` and
+imported only inside the unit-test block. `parseInstance` owns its parsed
+values until `deinit`; `validateFixtureSet` checks an explicitly supplied JSON
+array, including duplicate instance IDs across hosts. Neither function derives
+an instance ID from a profile ID. Callers must treat `id` and `profile_id` as
+distinct semantic fields even when their string values coincide, as can be
+reasonable for a singleton deployment. Equality is valid and does not establish
+derivation; provenance and stability across revisions cannot be inferred from
+JSON. There is no new collision in the legacy registry because instances are
+not wired into it. Only collection validation rejects duplicate instance IDs.
+Standard JSON Schema cannot express uniqueness by a single property; the Zig
+helper and offline fixture script perform that extra check.
+
+Secret values must remain external. No password, token, secret-value field or
+secret-resolution facility is defined here. Strict unknown-field rejection
+also applies inside runtime, mod, resource, and capability blocks. This is
+structural rejection of inline secret fields, not content inspection of opaque
+strings; operators must never place secrets inside permitted identity, version,
+path, or reference strings. The future external secret-reference shape remains
+open.
+
+GSA is not runtime authority. Describing a deployment does not imply that GSA
+owns its process startup. A game server must start and continue running
+independently when GSA fails. Lifecycle declarations are descriptive and
+potentially authorization-oriented, not permission to execute: validation is
+inert even when lifecycle or backup flags are `true`. There are no commands,
+live discovery, systemd/Podman calls, backups, provisioning, production registry,
+GUI wiring, C ABI changes, or changes to current deployments in this slice.
+The existing 18 A2ML profiles are unchanged legacy compatibility data; new A2ML
+profile authoring is retired. The JSON game-profile draft remains fixture-only.
+
+Run `just test` for Zig unit/integration tests and `just test-deployment-contract`
+for offline schema meta-validation and every fixture (Python `jsonschema` 4.x
+required; `PYTHON` may select an isolated virtual environment). Invalid fixtures
+have expected Zig errors and schema keywords or extra semantic errors recorded
+in `fixtures/deployment-instances/invalid-cases.json`. Minecraft coexistence and
+inert lifecycle declarations, optional opaque channels, and coincident
+instance/profile string values are covered by the Zig unit tests. The collection
+helper checks ID uniqueness, not runtime, port, filesystem or host resource
+collisions; fixture isolation is asserted separately. Existing legacy tests
+remain the compatibility guard.
+
 == Decisions still requiring maintainers
 
 . Whether JSON Schema (and this supported subset) is the right serialization
@@ -126,8 +213,13 @@ intentionally unchanged; its existing tests remain the compatibility guard.
   scenario references. GSA performs no compatibility decision in this slice.
 . Any live session-summary adapter contract, including authorization, data
   sensitivity/visibility, retention, and audit requirements.
-. Any real server operations contract: protocol/ports, installation/update,
-  lifecycle, backup, and offline behavior must come from the game owner.
+. Runtime-specific identity rules, host identity and cross-host ID scope,
+  rename semantics, port/path collision checks, resource ordering/capacity,
+  external secret references, and backup-policy authority.
+. Registry storage, migration, live discovery, instance-aware APIs, and
+  provisioning/action wiring require separate designs; no legacy fields are
+  repurposed for identity. Authorization, audit, and game-owner lifecycle
+  semantics must be decided before any execution support.
 
 See the link:../reports/quality/2026-10-18-game-profile-recon.adoc[recon report]
 for the repository/standards/CI findings behind this proposal.

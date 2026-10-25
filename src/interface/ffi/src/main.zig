@@ -24,6 +24,7 @@ pub const profile_contract = @import("profile_contract.zig"); // draft fixture v
 test {
     // Include the fixture validator's test declarations in the normal unit-test root.
     _ = @import("profile_contract.zig");
+    _ = @import("deployment_instance_contract.zig"); // fixture/test-only; no production import
 }
 pub const groove_client = @import("groove_client.zig");
 pub const steam_client = @import("steam_client.zig");

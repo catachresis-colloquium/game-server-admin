@@ -617,6 +617,11 @@ test *args:
     cd src/interface/ffi && zig build test-integration {{args}}
     @echo "All tests passed!"
 
+# Meta-validate the deployment schema and check all fixtures (jsonschema 4.x).
+# Override PYTHON to use a virtual environment; no live deployment access.
+test-deployment-contract:
+    "${PYTHON:-python3}" scripts/validate-deployment-instance-fixtures.py
+
 # Run tests with verbose output
 test-verbose:
     @echo "Running tests (verbose)..."
