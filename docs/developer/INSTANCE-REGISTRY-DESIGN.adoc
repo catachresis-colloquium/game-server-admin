@@ -1,0 +1,48 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Typed Deployment Registry and Explicit Selection
+:revdate: 2026-10-25
+:status: production internal API; persistence and execution are separate
+
+The maintainer rulings establish global estate IDs, immutable initial identity,
+opaque host/inventory keys, independently declared profile IDs, and a typed
+registry without requiring JSON persistence. This branch is based on the reviewed
+deployment-instance-contract branch; it does not alter that fixture contract.
+
+GsaHandle owns a deployment_registry.Registry independently of ProfileRegistry
+and probe connections. Registration validates and deep-copies typed declarations,
+rejects duplicate IDs across hosts, and has no rename/upsert API. Each estate
+must use one logical registry; independent processes do not magically coordinate
+IDs. A future persistence/distribution boundary must enforce the same identity
+namespace and cannot silently assign IDs from profiles, hosts, paths or ports.
+
+snapshot() takes the registry mutex once and returns an owned generation-tagged
+view. lookup(id) returns only that ID or UnknownInstance. resolveLegacy(profile?)
+returns the sole candidate or explicit UnknownInstance/AmbiguousInstance errors;
+iteration order cannot choose a winner. profile_id and id may contain equal text.
+The typed model includes paths, ports, game/mod metadata, optional resource bounds,
+optional backup policy, and fail-closed capability declarations corresponding to
+link:GAME-PROFILE-CONTRACT.adoc[the contract]. No JSON loader is required.
+
+observe(id, evidence) accepts only timestamped runtime evidence. Its type has
+no identity/configuration replacement fields. Stale/equal timestamps are rejected.
+Observations never rewrite declarations. Snapshot strings do not alias registry
+storage; source buffers and earlier snapshots cannot mutate inventory. Registry
+lifetime destruction requires callers to finish concurrent use first.
+
+The existing C ABI signatures and result codes are unchanged. The legacy logs
+entry point now rejects multiple tracked connections instead of using the first.
+With declared inventory, it checks singleton selection but refuses an unresolved
+backend rather than substituting a probe connection. Empty inventory retains the
+existing single-connection logs route. Explicit execution/host access belongs to
+a separate adapter; opaque host keys are never passed directly to SSH. No lifecycle
+execution, provisioning, fleet dispatch, GUI or permanent disk format is added.
+
+The eight reviewed scenario fixtures now run against the registry API, together
+with tests for independent/equal IDs, same-profile multi-host lookup, owned
+snapshots and immutable declarations under observation updates. Existing A2ML
+profile/parser tests remain unchanged and the legacy corpus still loads 18 profiles.
+
+GSA is not a runtime authority: game startup and continued operation never depend
+on this registry or its availability. Remaining work is explicit backend access,
+caller authorization, game-specific safety and replaceable persistence/history.

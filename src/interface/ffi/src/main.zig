@@ -19,11 +19,13 @@ pub const a2ml_emit = @import("a2ml_emit.zig");
 pub const verisimdb_client = @import("verisimdb_client.zig");
 pub const server_actions = @import("server_actions.zig");
 pub const game_profiles = @import("game_profiles.zig");
+pub const deployment_registry = @import("deployment_registry.zig");
 pub const profile_contract = @import("profile_contract.zig"); // draft fixture validator; not part of the C ABI or legacy registry
 
 test {
     // Include the fixture validator's test declarations in the normal unit-test root.
     _ = @import("profile_contract.zig");
+    _ = @import("deployment_registry.zig");
     _ = @import("deployment_schema_check.zig");
     _ = @import("deployment_instance_contract.zig"); // fixture/test-only; no production import
 }
@@ -215,6 +217,7 @@ pub const GsaHandle = struct {
     initialized: bool,
     allocator: Allocator,
     profile_registry: game_profiles.ProfileRegistry,
+    deployments: deployment_registry.Registry,
     verisimdb_url: []const u8,
     active_connections: std.StringHashMap(ConnectionState),
     /// Per-probe linear handles: id -> owned server-id string. This is what
@@ -238,6 +241,7 @@ pub const GsaHandle = struct {
             .initialized = false,
             .allocator = allocator,
             .profile_registry = game_profiles.ProfileRegistry.init(allocator),
+            .deployments = deployment_registry.Registry.init(allocator),
             .verisimdb_url = try allocator.dupe(u8, verisimdb_url),
             .active_connections = std.StringHashMap(ConnectionState).init(allocator),
             .open_handles = std.AutoHashMap(c_int, []const u8).init(allocator),
@@ -262,6 +266,7 @@ pub const GsaHandle = struct {
     pub fn destroy(self: *GsaHandle) void {
         const alloc = self.allocator;
         self.profile_registry.deinit();
+        self.deployments.deinit();
         alloc.free(self.verisimdb_url);
 
         var it = self.active_connections.iterator();
