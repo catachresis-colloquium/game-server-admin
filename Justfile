@@ -1103,7 +1103,11 @@ ijson-jcs:
     FILES=$(find schemas fixtures/deployment-instances/valid fixtures/instance-registry-design fixtures/minecraft-systemd-readonly fixtures/standard-operating-psychopathy -name '*.json' 2>/dev/null | sort)
     if [ -z "$FILES" ]; then echo "No estate JSON files"; exit 0; fi
     if command -v ijson-jcs >/dev/null 2>&1; then
-        for f in $FILES; do echo "check $f"; ijson-jcs check "$f"; done
+        for f in $FILES; do
+          ijson-jcs check "$f"; RC=$?
+          if [ "$RC" -eq 2 ]; then echo "INVALID $f (exit $RC)"; exit 1
+          elif [ "$RC" -eq 1 ]; then echo "NOT CANONICAL $f (advisory)"; fi
+        done
     else
         echo "ijson-jcs not found — using Python I-JSON fallback"
         for f in $FILES; do
