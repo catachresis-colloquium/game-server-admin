@@ -44,6 +44,7 @@ _You build GSA, extend it, or contribute code across the Gossamer GUI → Zig FF
 | `docs/decisions/` | live | Architecture decision records (RSR adoption)
 | `docs/developer/FFI-MODULE-REFERENCE.adoc` | live | Per-module docs for the FFI modules (every `gossamer_gsa_*` symbol, the 18 result codes, the handle lifecycle)
 | `docs/developer/GAME-PROFILE-CONTRACT.adoc` | draft | Versioned JSON profile/config validator and fixture-only status slice; no production adapter
+| `docs/developer/DEPLOYMENT-INSTANCE-DESIGN.adoc` | fixture-only | Separately versioned deployment-instance identity; one profile to many installations; no runtime wiring
 | `docs/developer/PANEL-EXTENSION-GUIDE.adoc` | live | Panel anatomy + the clade system; `nexus-setup` as the worked example; the `host.html` wiring points
 | `docs/wikis/05-The-Proven-ABI.md` | live | The machine-checked ABI contract (codegen pipeline, 18 codes, linear handles) — the differentiator, illustrated
 | `docs/wikis/06-HTTP-Capability-Gateway.md` | live | How outbound HTTP is a declared, deadline-bounded, default-deny capability

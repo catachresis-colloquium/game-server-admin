@@ -109,5 +109,10 @@
     "file": "malformed-update-channel.json",
     "zig_error": "UnexpectedToken",
     "schema_keyword": "type"
+  },
+  {
+    "file": "precision-fractional-port.json",
+    "zig_error": "InvalidNumber",
+    "schema_keyword": "type"
   }
 ]

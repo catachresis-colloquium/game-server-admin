@@ -1,7 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:gsa:deployment-instance:0.1.0",
-  "$comment": "SPDX-License-Identifier: MPL-2.0. Fixture/test-only; no runtime authority or execution.",
   "title": "GSA Deployment Instance 0.1.0",
   "description": "Explicit installation identity, independently versioned from game profiles. Unknown fields (including secret fields) are rejected at every object boundary. Instance IDs are independently declared; collection ID uniqueness is checked by the fixture validator.",
   "type": "object",
@@ -179,17 +178,20 @@
       "properties": {
         "memory": {
           "type": "object",
-          "required": [
-            "minimum",
-            "maximum"
-          ],
+          "required": [],
           "properties": {
             "minimum": {
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "pattern": "^[1-9][0-9]{0,14}[KMGT](?![\\s\\S])"
             },
             "maximum": {
-              "type": "string",
+              "type": [
+                "string",
+                "null"
+              ],
               "pattern": "^[1-9][0-9]{0,14}[KMGT](?![\\s\\S])"
             }
           },
@@ -200,12 +202,13 @@
     },
     "backup": {
       "type": "object",
-      "required": [
-        "policy_ref"
-      ],
+      "required": [],
       "properties": {
         "policy_ref": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}(?![\\s\\S])"
         }
       },

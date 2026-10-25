@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (c) 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
 // Fixture/test-only. No registry, ABI, process, filesystem or network adapter.
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const exact = @import("exact_json_number.zig");
 pub const CONTRACT_NAME = "gsa.deployment-instance";
 pub const CONTRACT_VERSION = "0.1.0";
 const ReadOnly = struct { enabled: bool, mode: []const u8 };
@@ -14,12 +15,19 @@ const Port = struct {
     // Zig's integer JSON parser accepts numeric strings. Inspect the token's
     // JSON type first, so this boundary agrees with JSON Schema's integer type.
     pub fn jsonParse(allocator: Allocator, source: anytype, options: std.json.ParseOptions) !Port {
-        const value = try std.json.innerParse(std.json.Value, allocator, source, options);
+        var exact_options = options;
+        exact_options.parse_numbers = false;
+        var value = try std.json.innerParse(std.json.Value, allocator, source, exact_options);
         if (value == .object) {
             if (value.object.get("port")) |number| {
                 switch (number) {
-                    .integer => {},
-                    .float => |n| if (@trunc(n) != n) return error.InvalidNumber,
+                    .number_string => |raw| {
+                        const number_value = exact.analyze(raw);
+                        if (!number_value.integral) return error.InvalidNumber;
+                        const magnitude = number_value.magnitude orelse 0;
+                        const n = if (number_value.negative or magnitude > 65535) 0 else magnitude;
+                        try value.object.put("port", .{ .integer = @intCast(n) });
+                    },
                     else => return error.UnexpectedToken,
                 }
             }
@@ -42,8 +50,8 @@ pub const Instance = struct {
     ports: []const Port,
     paths: struct { data: []const []const u8, config: []const []const u8, world: []const []const u8 },
     game: struct { version: []const u8, update_channel: ?[]const u8 = null, mods: []const Mod },
-    resources: struct { memory: struct { minimum: []const u8, maximum: []const u8 } },
-    backup: struct { policy_ref: []const u8 },
+    resources: struct { memory: struct { minimum: ?[]const u8 = null, maximum: ?[]const u8 = null } },
+    backup: struct { policy_ref: ?[]const u8 = null },
     capabilities: struct {
         probe: ReadOnly,
         config: ReadOnly,
@@ -100,9 +108,9 @@ fn validate(instance: Instance) !void {
     for (instance.game.mods) |mod| {
         if (!isId(mod.id) or mod.version.len == 0) return error.InvalidMod;
     }
-    if (!isMemory(instance.resources.memory.minimum) or
-        !isMemory(instance.resources.memory.maximum)) return error.InvalidResourceLimit;
-    if (!isId(instance.backup.policy_ref)) return error.InvalidPolicyReference;
+    if (instance.resources.memory.minimum) |value| if (!isMemory(value)) return error.InvalidResourceLimit;
+    if (instance.resources.memory.maximum) |value| if (!isMemory(value)) return error.InvalidResourceLimit;
+    if (instance.backup.policy_ref) |value| if (!isId(value)) return error.InvalidPolicyReference;
 }
 
 fn oneOf(value: []const u8, allowed: []const []const u8) bool {
@@ -134,7 +142,7 @@ const fixture_root = "fixtures/deployment-instances/";
 fn readFixture(path: []const u8) ![]u8 {
     return std.fs.cwd().readFileAlloc(std.testing.allocator, path, 1024 * 1024);
 }
-const valid_files = [_][]const u8{ "minecraft-survival", "minecraft-creative", "minecraft-modded", "barotrauma-coop", "minecraft-singleton" };
+const valid_files = [_][]const u8{ "minecraft-survival", "minecraft-creative", "minecraft-modded", "barotrauma-coop", "minecraft-singleton", "unknown-limits", "partial-limits", "integer-decimal-port", "integer-exponent-port" };
 
 test "deployment instances: valid fixtures and multi-Minecraft isolation" {
     const allocator = std.testing.allocator;
@@ -275,4 +283,22 @@ test "deployment instances: optional opaque channels and coincident identity str
     const collection = try std.json.Stringify.valueAlloc(allocator, [_]Instance{ singleton.value, singleton.value }, .{});
     defer allocator.free(collection);
     try std.testing.expectError(error.DuplicateInstanceId, validateFixtureSet(allocator, collection));
+}
+
+test "deployment instances: unknown resource and policy metadata stays unknown" {
+    const a = std.testing.allocator;
+    const bytes = try readFixture(fixture_root ++ "valid/unknown-limits.json");
+    defer a.free(bytes);
+    const parsed = try parseInstance(a, bytes);
+    defer parsed.deinit();
+    try std.testing.expect(parsed.value.resources.memory.minimum == null);
+    try std.testing.expect(parsed.value.resources.memory.maximum == null);
+    try std.testing.expect(parsed.value.backup.policy_ref == null);
+    try std.testing.expect(!parsed.value.capabilities.backup.enabled);
+    const partial = try readFixture(fixture_root ++ "valid/partial-limits.json");
+    defer a.free(partial);
+    const known = try parseInstance(a, partial);
+    defer known.deinit();
+    try std.testing.expect(known.value.resources.memory.minimum == null);
+    try std.testing.expectEqualStrings("2G", known.value.resources.memory.maximum.?);
 }

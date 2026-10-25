@@ -124,7 +124,8 @@ link:DEPLOYMENT-INSTANCE-DESIGN.adoc[the motivating design note].
 contract name/version: `gsa.deployment-instance`, `0.1.0`. This schema accepts
 that exact version, not arbitrary future versions; each version needs explicit
 support. It is separate from the draft game-profile contract. All listed blocks
-and their members are required except `game.update_channel`; arrays may be
+and their members are required except optional channel, memory bounds and
+backup policy; arrays may be
 empty to explicitly declare no entries. No operational defaults are inferred.
 Unknown keys are forbidden at every object boundary, following the existing
 profile schema policy.
@@ -149,9 +150,11 @@ necessarily semantic versions or universal release tracks. GSA assigns no
 `stable`/`beta` meaning, resolves no branches, and performs no updates.
 |`resources` |`memory.minimum` and `memory.maximum`: positive integers of 1–15
 digits followed by `K`, `M`, `G`, or `T`, meaning binary units (powers of 1024).
-No leading zeroes, signs, fractions, or unitless values. Ordering and host
+Each bound may be omitted or null when unknown/not configured; neither means zero.
+No leading zeroes, signs, fractions, or unitless configured values. Ordering and host
 capacity are not checked in this first structural contract.
-|`backup` |Identifier-shaped `policy_ref`, opaque and unresolved.
+|`backup` |Identifier-shaped `policy_ref`, opaque and unresolved. Omission or null means no configured/known policy;
+backup may be disabled without a fabricated reference.
 |`capabilities` |`probe`, `config`, `logs`: each has boolean `enabled` and mode
 exactly `read-only`; `lifecycle`: boolean `start`, `stop`, `restart`, `update`;
 `backup`: boolean `enabled`.
@@ -189,8 +192,13 @@ The existing 18 A2ML profiles are unchanged legacy compatibility data; new A2ML
 profile authoring is retired. The JSON game-profile draft remains fixture-only.
 
 Run `just test` for Zig unit/integration tests and `just test-deployment-contract`
-for offline schema meta-validation and every fixture (Python `jsonschema` 4.x
-required; `PYTHON` may select an isolated virtual environment). Invalid fixtures
+for dependency-free offline Zig schema-subset and fixture checks. Full Draft
+2020-12 meta-schema and independent arbitrary-precision fixture validation use
+just test-deployment-schema-meta (approved Rust development tooling; Cargo
+required, locked dependencies, no HTTP reference retrieval). There is no
+general JSON Schema engine in the existing Zig tooling; the in-tree Zig
+evaluator supports only this schema vocabulary/pattern set and rejects schema
+expansion it cannot interpret. It is not full Draft meta-validation. Invalid fixtures
 have expected Zig errors and schema keywords or extra semantic errors recorded
 in `fixtures/deployment-instances/invalid-cases.json`. Minecraft coexistence and
 inert lifecycle declarations, optional opaque channels, and coincident
@@ -223,3 +231,15 @@ remain the compatibility guard.
 
 See the link:../reports/quality/2026-10-18-game-profile-recon.adoc[recon report]
 for the repository/standards/CI findings behind this proposal.
+
+== Numeric precision and licensing
+
+Port numeric source lexemes are retained and analyzed as exact decimal/exponent
+values before conversion. Integer-valued 25565.0 and 2.5565e4 are accepted;
+fractions are rejected even when an f64 conversion would round them away.
+Numeric strings are not numbers. Zig and an independent Rust arbitrary-precision
+Draft validator exercise the same fixtures, including the precision regression.
+
+New JSON schema/fixture files use standard adjacent REUSE .license sidecars
+with AGPL-3.0-or-later and the mandated copyright attribution. No license keys
+are inserted into instance documents. Existing legacy file licenses are unchanged.

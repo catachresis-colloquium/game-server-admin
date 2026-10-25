@@ -617,10 +617,13 @@ test *args:
     cd src/interface/ffi && zig build test-integration {{args}}
     @echo "All tests passed!"
 
-# Meta-validate the deployment schema and check all fixtures (jsonschema 4.x).
-# Override PYTHON to use a virtual environment; no live deployment access.
+# Offline Zig schema-subset/fixture checks; no live deployment access.
 test-deployment-contract:
-    "${PYTHON:-python3}" scripts/validate-deployment-instance-fixtures.py
+    zig run src/interface/ffi/src/deployment_schema_check.zig
+
+# Full Draft 2020-12 meta-schema validation uses an approved Rust dev tool.
+test-deployment-schema-meta:
+    cargo run --locked --manifest-path tools/deployment-schema-meta/Cargo.toml -- schemas/deployment-instance-0.1.schema.json
 
 # Run tests with verbose output
 test-verbose:
