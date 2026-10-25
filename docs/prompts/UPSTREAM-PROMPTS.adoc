@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: MPL-2.0
+= Upstream prompts required for the estate rebuild
+:revdate: 2026-10-25
+
+These prompts are for maintainer use when an obstacle found in the
+`arena/3a7f9ab2-game-server-admin` foundational rebuild requires a change in
+another repository. Each section is a self-contained copy-paste prompt for an
+AI agent or human contributor working in that upstream repo.
+
+The rebuild's local fixes (pins, workflow hardening, Justfile recipes) are
+committed in this branch; the items below are the upstream follow-ups that make
+those fixes durable estate-wide.
+
+== 1. hyperpolymath/standards — pin the new estate SHAs estate-wide
+
+Copy to an agent working in `hyperpolymath/standards` (or use as a PR body):
+
+----
+Title: bump consumer pin guidance to 8e48b1c and document the 1.19.4/28.3 Hypatia fix
+
+Context: game-server-admin's arena/3a7f9ab2 rebuild bumped
+governance/scorecard/secret-scanner/mirror reusables from 571cc73 to 8e48b1c
+and fixed hypatia-scan.yml by moving from elixir 1.18/OTP27 to 1.19.4/28.3 with
+caching (resolve Hypatia HEAD via git ls-remote, cache ~/.mix/~/.hex/~/hypatia,
+mix local.hex --force, continue-on-error fallback to empty findings + SARIF).
+
+Ask:
+1. Publish a short migration note for downstream consumers: the 8e48b1c SHA
+   (post-2026-10-24) is the minimum for the new governance bundle's
+   baseline-strict+HYPATIA_SCAN_PAT contract and for the Zig 0.15.2 install via
+   scripts/install-zig.sh.
+2. Add to 3-practice/YAML-POLICY.adoc or CI-CD-GUIDE.adoc an explicit callout:
+   consumers must set `elixir-version: '1.19.4'` / `otp-version: '28.3'` when
+   they use erlef/setup-beam for Hypatia, and must use the caching pattern
+   above to avoid the mix deps.get startup_failure that was killing SARIF upload.
+3. Verify that the reusable governance-reusable.yml at 8e48b1c still emits
+   startup_success when HYPATIA_SCAN_PAT is absent (consumer warning, not failure)
+   — game-server-admin confirmed this after the bump.
+----
+
+== 2. hyperpolymath/ijson-jcs — publish a prebuilt binary
+
+Copy to an agent in `hyperpolymath/ijson-jcs`:
+
+----
+Title: publish Linux x86_64 + aarch64 ijson-jcs binaries for CI consumers
+
+Context: game-server-admin adopted ijson-jcs as the estate JSON standard
+(D306 via metadatastician/kyq) and added .github/workflows/estate-compliance.yml
+that runs `ijson-jcs check` for every *.json. In CI without Rust, the job
+falls back to a Python I-JSON check (UTF-8, duplicate keys, final LF), but
+strict JCS canonicalisation (sorted keys, --strict) needs the real binary.
+Consumers should not be forced to cargo install from git on every run.
+
+Ask:
+1. Add a GitHub Release workflow that cross-compiles ijson-jcs for
+   x86_64-unknown-linux-musl and aarch64-unknown-linux-musl on tag push and
+   attaches the binaries (e.g. ijson-jcs-x86_64-linux-musl) as release assets.
+2. Document the install one-liner for consumers:
+   `curl -fsSL https://github.com/hyperpolymath/ijson-jcs/releases/latest/download/ijson-jcs-x86_64-linux-musl -o /usr/local/bin/ijson-jcs && chmod +x /usr/local/bin/ijson-jcs`
+3. Add a --version contract test so consumers can gate on `ijson-jcs --version`.
+4. (Optional) Provide a cargo-binstall compatible entry for faster install.
+
+Acceptance: estate-compliance.yml in game-server-admin switches from advisory
+Python fallback to strict `ijson-jcs check` on the next run without cargo.
+----
+
+== 3. hyperpolymath/pons-asinorum — publish a pony binary + document the pons contract
+
+Copy to an agent in `hyperpolymath/pons-asinorum`:
+
+----
+Title: publish pons binary and document the 38-subcommand / T0 catalogue contract
+
+Context: game-server-admin's deep-recon job tries `pons scan . --format json`
+with a fallback to cargo install; the binary is not yet published, so CI
+degrades to advisory. The build also needs the T0 catalogue's 8 rules
+documented for auditors.
+
+Ask:
+1. Publish the `pons` binary via the same release flow as ijson-jcs (musl
+   builds, release assets, cargo-binstall).
+2. Document the `pons scan --format json` output contract (fields, exit codes,
+   falsifier gate) so consumers can write a stable SARIF/JSON converter.
+3. Expose `pons --version` and `pons rules list` for CI pinning and audit.
+----
+
+== 4. hyperpolymath/panic-attack — publish release artifacts (already partially done)
+
+Copy to an agent in `hyperpolymath/panic-attack`:
+
+----
+Title: ensure panic-attack assail works via release asset in downstream CI
+
+Context: game-server-admin already runs `panic-attack assail` via
+static-analysis-gate.yml; the release asset exists but the URL pattern in
+estate-compliance.yml is provisional (guessed as
+https://github.com/hyperpolymath/panic-attack/releases/latest/download/panic-attack-linux-x86_64).
+
+Ask:
+1. Confirm (or publish) the Linux x86_64 release asset name and update
+   https://github.com/hyperpolymath/panic-attack/blob/main/README.adoc with
+   the correct consumer install line.
+2. Document the 25 PA categories and the 38 subcommand contract so downstream
+   SARIF mapping is stable (mirrors the game-server-admin hypatia converter).
+----
+
+== 5. hyperpolymath/cicd-squabbler — publish squabble CLI and document the SPARK invariant
+
+Copy to an agent in `hyperpolymath/cicd-squabbler`:
+
+----
+Title: publish squabble CLI binary and the Justfile template for consumers
+
+Context: game-server-admin added estate-compliance.yml's cicd-squabbler job
+that installs `squabble-cli` via cargo install --git and runs
+`squabble diagnose` + `squabble chains .`. In restricted networks
+(Arena sandbox) cargo install is unavailable, so fallback is advisory only.
+Consumers want a binary install and the Justfile template's prove/demo
+recipes.
+
+Ask:
+1. Publish `squabble` binary via release assets (musl) and cargo-binstall.
+2. Verify the SPARK invariant green⇔non-empty∧all-passed is documented in the
+   consumer README alongside the 8 deadlock moves (stale SHA, startup_failure,
+   path-filter stranding, etc.).
+3. Publish the Justfile template with `prove`, `demo`, `graphql-schema-refresh`,
+   `test --features boj` that consumers can `just --import` or copy (see
+   hyperpolymath/cicd-squabbler/Justfile in the upstream repo).
+----
+
+== 6. metadatastician/kyq + hyperpolymath/standards scripts — yq distribution
+
+Copy to an agent in `metadatastician/kyq` or `hyperpolymath/standards`:
+
+----
+Title: host yq v4.53.3 where restricted runners can fetch it
+
+Context: game-server-admin's KYAML gate uses scripts/kyaml-format.sh with
+yq v4.53.3 (`yq -p yaml -o kyaml '.'` — the only rewriter proven in
+tools/yaml-comment-proof). In the Arena sandbox, release-assets.githubusercontent.com
+is blocked, so the script cannot fetch yq via gh release download. In GitHub
+Actions, fetching via the GitHub API works, but a mirror would make the estate
+hermetic.
+
+Ask:
+1. Host a copy of the yq v4.53.3 binary (or the mikefarah attestations) in a
+   location allowlisted for both GitHub Actions and Arena sandboxes
+   (e.g. as an OCI artifact or via the standards repo's own release assets).
+2. Document the verified SHA256 for yq v4.53.3 and add it to scripts/kyaml-format.sh's
+   integrity check (currently a placeholder SHA).
+3. Add the same fallback logic to standards/scripts/kyaml-format.sh that
+   game-server-admin added to scripts/install-zig.sh for RUNNER_TEMP/GITHUB_PATH
+   (fallback to /tmp + HOME/.local/bin when not in Actions).
+----
+
+== 7. ziglang/zig (informational — no upstream PR, local workaround)
+
+No prompt needed; game-server-admin's scripts/install-zig.sh already pins
+Zig 0.15.2 with a sha256 and minisig verification against
+RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U. The Arena sandbox's
+block on ziglang.org (SSL_ERROR_SYSCALL) is sandbox-specific; in GitHub Actions
+the fetch from https://ziglang.org/download/0.15.2/zig-x86_64-linux-0.15.2.tar.xz
+works. The local fallback added in this branch (RUNNER_TEMP→/tmp,
+GITHUB_PATH→HOME/.local/bin, GitHub mirror fallback) is the durable fix.
+If Zig ever moves downloads to GitHub Releases only, update the fallback URL in
+scripts/install-zig.sh to https://github.com/ziglang/zig/releases/download/0.15.2/
+and add that host to .github/actions-policy.yml.
+----
+
+All prompts are intentionally copy-paste; they include the exact SHAs, versions,
+and contract references so the upstream agent can verify without re-reading the
+full rebuild branch.

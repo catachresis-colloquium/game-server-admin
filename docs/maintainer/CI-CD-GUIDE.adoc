@@ -20,6 +20,12 @@ all but calls into reusable workflows hosted in the estate `standards`
 repo (`hyperpolymath/standards`), each pinned to a SHA in the same way. See
 <<estate-reusables>> for the pinning convention and which workflows use it.
 
+New in the `arena/3a7f9ab2` foundational rebuild (consolidated at `2613b50`):
+the estate compliance gate (§ <<estate-compliance>>) runs I-JSON/JCS,
+KYAML, `cicd-squabbler` and the `proven-tests` lattice on every PR, plus
+`pons-asinorum`/`panic-attack` deep recon as advisory jobs. See
+`docs/developer/ESTATE-COMPLIANCE.adoc` for the full contract.
+
 == The workflows
 
 One row per file in `.github/workflows/`, verified against the file
@@ -29,7 +35,17 @@ contents (not inferred from the name).
 |===
 | File | Trigger(s) | What it gates
 
-3+h| Build / test
+3+h| Build / test / compliance
+
+| `estate-compliance.yml`
+| PR to any, push to `main`/`master`, manual dispatch
+| Estate compliance gate: five jobs — `ijson-jcs` (I-JSON/JCS canonical JSON
+  via `hyperpolymath/ijson-jcs`, Python fallback), `kyaml` (KYAML estate
+  YAML via `scripts/kyaml-format.sh` with `yq` 4.53.3), `cicd-squabbler`
+  (`squabble diagnose` + `chains`, SPARK-proved gate-deadlock diagnosis),
+  `proven-tests` (7-suite lattice counts from executed tests), and
+  `deep-recon` (`pons-asinorum` depth + `panic-attack` breadth, advisory).
+  See `docs/developer/ESTATE-COMPLIANCE.adoc`.
 
 | `abi-contract.yml`
 | push to `main`/`claude/**`, PR to `main`
@@ -209,7 +225,7 @@ this script without re-reading that scoping note first.
 [[estate-reusables]]
 == Estate reusable workflows + pinning
 
-Four of the sixteen workflows are thin wrappers that call a reusable
+Four of the nineteen workflows are thin wrappers that call a reusable
 workflow defined in `hyperpolymath/standards` rather than defining jobs
 locally:
 
@@ -217,11 +233,16 @@ locally:
 |===
 | Workflow | Reusable called
 
-| `governance.yml`   | `governance-reusable.yml@d7c22711e830e1f383846472f6e9b99debdb201e`
-| `scorecard.yml`     | `scorecard-reusable.yml@d7c22711e830e1f383846472f6e9b99debdb201e`
-| `secret-scanner.yml`| `secret-scanner-reusable.yml@d135b05bfc647d0c0fbfedc7e80f37ea50f49236`
-| `mirror.yml`        | `mirror-reusable.yml@d135b05bfc647d0c0fbfedc7e80f37ea50f49236`
+| `governance.yml`   | `governance-reusable.yml@8e48b1caade08a552646adeab66558ac43b4360d`
+| `scorecard.yml`     | `scorecard-reusable.yml@8e48b1caade08a552646adeab66558ac43b4360d`
+| `secret-scanner.yml`| `secret-scanner-reusable.yml@8e48b1caade08a552646adeab66558ac43b4360d`
+| `mirror.yml`        | `mirror-reusable.yml@8e48b1caade08a552646adeab66558ac43b4360d`
 |===
+
+`estate-compliance.yml` is not a reusable wrapper — it defines its five
+jobs locally (ijson-jcs, kyaml, cicd-squabbler, proven-tests, deep-recon)
+so its actions are pinned directly via `actions.lock`. See
+`docs/developer/ESTATE-COMPLIANCE.adoc` for its contract.
 
 Both are full 40-character commit SHAs, exactly like the third-party
 `actions/*` pins elsewhere in the estate — never a branch or floating tag.
@@ -248,6 +269,52 @@ for the reusable-pin token to detect repos lagging behind the latest
 `standards` SHA; `scorecard.yml` carries a comment warning not to
 duplicate the pin string elsewhere in that file, because a second match
 breaks that check's single-pin assumption.
+
+[[estate-compliance]]
+== Estate compliance gate (`estate-compliance.yml`)
+
+Added in the `arena/3a7f9ab2` rebuild to hold the estate's canonical
+format and diagnostic gates in one place rather than letting them rot as
+advisory TODOs. Five jobs, each read-only and `cancel-in-progress`:
+
+[cols=\"2,4\",options=\"header\"]
+|===
+| Job | What it checks
+
+| `ijson-jcs` | Every `*.json` is I-JSON (RFC 7493) and, where semantically hashed,
+  JCS-canonical (RFC 8785) with one final LF. Uses `hyperpolymath/ijson-jcs`
+  (`ijson-jcs check`); falls back to a Python duplicate-key/UTF-8/final-LF
+  check when the binary is not available. See `just ijson-jcs`.
+
+| `kyaml` | Every estate-authored `*.yml`/`*.yaml` is KYAML (YAML-POLICY D280/D307)
+  via `scripts/kyaml-format.sh --check` with `yq` 4.53.3 (`yq -p yaml -o kyaml '.'`
+  — the only rewriter proven in `tools/yaml-comment-proof`). Falls back to
+  a Python `yaml.safe_load` + tab + final-LF check. See `just kyaml`.
+
+| `cicd-squabbler` | `squabble diagnose` + `squabble chains` (read-only) from
+  `hyperpolymath/cicd-squabbler` (SPARK-proved `green ⇔ ran∧passed`).
+  Surfaces gate deadlocks as `::warning::` not failures — only the repo's
+  own code should block `red→green`.
+
+| `proven-tests` | All 7 Zig suites (`test`, `test-integration`, `test-smoke`,
+  `test-property`, `test-behavioral`, `test-cli`, `fuzz`) via
+  `scripts/install-zig.sh` + `zig build test*`, counting `All N tests passed`
+  lines into a category×aspect lattice (provenance from executed tests, not
+  declared counts). CRG badge parity checked via `just crg-badge-sync`.
+
+| `deep-recon` | `pons-asinorum` depth (`pons scan`) + `panic-attack` breadth
+  (`panic-attack assail`), both advisory; critical findings surfaced as
+  warnings and uploaded as `deep-recon-findings` artifact.
+|===
+
+Local mirror: `just estate-compliance` runs the I-JSON + KYAML subset;
+`just squabble-diagnose`, `just proven-category`, `just pons-scan`,
+`just panic-assail` run the scanner subset when the binaries are present.
+
+The gate is intentionally advisory in v0.1 for the scanner jobs — a
+`startup_failure` in Hypatia's Elixir build (fixed here by bumping to
+1.19.4/28.3 + caching) previously killed SARIF upload; the same decoupling
+applies here so a missing binary never blocks `red→green`.
 
 == Adding or changing a check
 
