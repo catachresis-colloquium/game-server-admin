@@ -1,0 +1,86 @@
+{
+  "status": "synthetic policy-test scenarios; no execution",
+  "cases": [
+    {
+      "name": "not-advertised",
+      "advertised": false,
+      "caller_authorized": true,
+      "backend_exists": true,
+      "game_safe": true,
+      "expected": "unsupported",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "caller-denied",
+      "advertised": true,
+      "caller_authorized": false,
+      "backend_exists": true,
+      "game_safe": true,
+      "expected": "unauthorized",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "backend-missing",
+      "advertised": true,
+      "caller_authorized": true,
+      "backend_exists": false,
+      "game_safe": true,
+      "expected": "backend_unavailable",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "unsafe-game",
+      "advertised": true,
+      "caller_authorized": true,
+      "backend_exists": true,
+      "game_safe": false,
+      "expected": "unsafe",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "unknown-game-safety",
+      "advertised": true,
+      "caller_authorized": true,
+      "backend_exists": true,
+      "game_safe": null,
+      "expected": "unsafe",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "all-gates-satisfied",
+      "advertised": true,
+      "caller_authorized": true,
+      "backend_exists": true,
+      "game_safe": true,
+      "expected": "eligible_not_executed",
+      "dispatches_in_this_task": 0
+    },
+    {
+      "name": "external-backup",
+      "owner": "external",
+      "policy_ref": "external-world-backup",
+      "expected": "externally_managed",
+      "gsa_execution_authorized": false
+    },
+    {
+      "name": "minecraft-no-control-channel",
+      "game": "minecraft-java",
+      "rcon_available": false,
+      "console_available": false,
+      "requested": "hot_backup",
+      "expected": "needs_clean_stop"
+    },
+    {
+      "name": "minecraft-stop-not-confirmed",
+      "requested": "stop_required_backup",
+      "stop_acknowledged": false,
+      "expected": "needs_clean_stop"
+    },
+    {
+      "name": "initially-stopped",
+      "was_running": false,
+      "requested": "stop_required_backup",
+      "expected_restart": false
+    }
+  ]
+}
