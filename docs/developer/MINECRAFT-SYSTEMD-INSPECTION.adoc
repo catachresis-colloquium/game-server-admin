@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Read-only Minecraft/systemd Inspection Prototype
+:revdate: 2026-10-25
+:status: internal, fixture-driven; no live collector or production API
+
+== Boundary
+
+This slice is rebased onto deployment-instance-contract while PR #112 awaits
+merge, so both test-only imports coexist. Its inspection interface does not
+require a production registry.
+It accepts an explicit instance ID and unit; it neither derives identity from a
+profile nor needs a production instance registry. The implementation is imported
+only by the unit-test block in main.zig. No C ABI, GUI, profile registry, action
+dispatcher, provisioning script, service, container or live deployment changes.
+
+systemd_inspect.zig provides a generic bounded property parser and a fixed argv
+plan for systemctl show. It has no executor. minecraft_systemd_inspect.zig accepts
+already collected evidence, projects a safe owned report, and executes nothing.
+There are no start, stop, restart, config-write, environment-read, backup, SSH,
+RCON or console-input paths. Minecraft startup remains independent of GSA.
+
+== Input and output
+
+Input supplies instance_id, unit, observation Unix seconds, optional same-boot
+CLOCK_MONOTONIC microseconds, systemctl_show, optional process_argv vector,
+server_properties text, version_json, and selected mod_metadata_json payloads.
+Inputs are synthetic in this PR. Unknown raw properties/metadata are discarded;
+they are never included in the report or value-bearing error messages.
+
+Each discovered field carries a fixed source/field label and a basis:
+supplied, observed, configured, or derived. Missing optional evidence yields
+null/empty collections, never fabricated version/port/world defaults.
+
+[cols="1,3",options="header"]
+|===
+|Report field |Evidence and limits
+|instance_id, observed_at_unix_seconds |Explicit caller input and collector clock;
+not assertions of discovery or authorization.
+|unit, load_state, active_state |Id, LoadState, ActiveState properties; mismatched
+unit identity, duplicate properties and malformed state values fail.
+|service_uptime_us |ActiveEnterTimestampMonotonic subtracted from same-host,
+same-boot monotonic sample for an active loaded service. Missing/zero transition
+is unknown; reversed clocks fail. This is time since entering active state, not
+proof of the JVM's age or a continuous healthy game session.
+|working_directory |WorkingDirectory when present and within the supported safe
+absolute POSIX path subset. No filesystem access occurs.
+|listener |Only server-ip/server-port configuration is projected. Evidence is
+explicitly configured, not a verified listening socket. Null address or port
+means that individual setting was not supplied.
+|java_executable, jvm_arguments |Supplied argv vector: absolute java executable,
+positive -Xms/-Xmx quantities and four exact GC/pre-touch flags. Everything else,
+including -D options, agents, JAR names, game arguments and unexpected flags, is
+withheld. Collection of JVM flags stops at the first unrecognized token, so
+application arguments after a JAR/class/unknown option cannot be mislabelled.
+Only withheld count is exposed. No shell parsing of ExecStart.
+|minecraft_version |id from explicitly supplied version.json metadata; not the
+version currently running unless a future collector verifies process/artifact
+association.
+|fabric_loader_version, mods |fabric.mod.json id/version metadata; loader ID is
+fabricloader. No mod code is loaded. Duplicate IDs and malformed metadata fail.
+Selected installed metadata is not proof that a mod is loaded, compatible,
+server-side, or a complete inventory.
+|config_path, world_path |WorkingDirectory/server.properties is a labelled
+convention-based inference. World path combines WorkingDirectory and an explicit
+simple level-name. Neither existence nor symlink containment is established.
+|===
+
+The parser intentionally supports only simple key=value Java properties and
+simple world names. Escaped property syntax, nested world paths, arbitrary JVM
+options, custom config locations, relative/systemd-escaped working directories,
+classpath/nested mod discovery and wrapper processes require further design.
+Unsupported evidence fails or remains unknown; no default full config/log dump
+is used as fallback. The source labels identify evidence types and keys, not
+authenticated provenance.
+
+== Privacy and lifecycle tests
+
+Four fixtures cover active, inactive, missing and minimal units. Tests also
+cover malformed/duplicate/mismatched output, absent metadata, invalid ports/world
+paths, stale process evidence, clock reversal, mod metadata/duplicate IDs,
+unexpected JVM arguments, retained ownership, and secret-canary exclusion from
+the serialized report. The executor-free interface and fixed show-only argv
+are the lifecycle boundary; there is no injectable generic command runner.
+
+Raw Environment and secret configuration/mod fields appear only as synthetic
+negative-test canaries. No full environment, server.properties, raw argv, or
+metadata object is returned. This is field allowlisting, not a guarantee that
+an operator has never embedded a secret in a permitted path/identifier/version.
+
+== Intended later integration and blockers
+
+A future read-only collector should receive an explicitly selected instance,
+invoke only the property plan, bind proc argv to that service's MainPID with
+PID/start-time race checks, sample clocks on the same host/boot, and attach
+artifact paths/revisions and per-source capture times. It must cap time/output,
+authenticate remote sources, avoid environment/ExecStart dumps, handle access
+denied separately from not-found, and use safe file/JAR readers without executing
+JVM/mod code. Socket observations must be process-attributed rather than
+inferred from a port match. Unit scope (system vs user manager) must be explicit.
+
+Blockers for production integration: the instance registry/selection API and
+capability/authorization policy are not approved; no live collector is included.
+An inventory from this prototype must not be promoted into runtime authority.
+No deployment to wizardly-hellman is performed.
+
+== Verification and sources
+
+Run just test and just test-smoke from the repository root; unit tests read
+fixtures from that root. Zig 0.15.2 is used. Format only the two new modules and
+the touched main.zig; the six existing repository-wide formatting failures are
+outside this contribution.
+
+* https://www.freedesktop.org/software/systemd/man/257/org.freedesktop.systemd1.html[systemd property semantics]:
+  active transition timestamps use microseconds and their named clock.
+* https://docs.fabricmc.net/develop/loader/fabric-mod-json[Fabric metadata]:
+  mod ID/version live in fabric.mod.json.
+* https://docs.fabricmc.net/develop/loader/[Fabric Loader]:
+  classpath and nested-JAR loading mean a directory listing alone is incomplete.

@@ -26,6 +26,7 @@ test {
     _ = @import("profile_contract.zig");
     _ = @import("deployment_schema_check.zig");
     _ = @import("deployment_instance_contract.zig"); // fixture/test-only; no production import
+    _ = @import("minecraft_systemd_inspect.zig"); // read-only fixture adapter; no production import
 }
 pub const groove_client = @import("groove_client.zig");
 pub const steam_client = @import("steam_client.zig");
