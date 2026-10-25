@@ -20,12 +20,14 @@ pub const verisimdb_client = @import("verisimdb_client.zig");
 pub const server_actions = @import("server_actions.zig");
 pub const game_profiles = @import("game_profiles.zig");
 pub const deployment_registry = @import("deployment_registry.zig");
+pub const fleet_dispatch = @import("fleet_dispatch.zig");
 pub const profile_contract = @import("profile_contract.zig"); // draft fixture validator; not part of the C ABI or legacy registry
 
 test {
     // Include the fixture validator's test declarations in the normal unit-test root.
     _ = @import("profile_contract.zig");
     _ = @import("deployment_registry.zig");
+    _ = @import("fleet_dispatch.zig");
     _ = @import("deployment_schema_check.zig");
     _ = @import("deployment_instance_contract.zig"); // fixture/test-only; no production import
     _ = @import("minecraft_systemd_inspect.zig"); // read-only fixture adapter; no production import
