@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= First Production Deployment Instance: Minecraft Fabric
+:status: production read-only qualification; no lifecycle actions
+
+This is the first operator-controlled production use of the separately versioned
+`gsa.deployment-instance` contract. It selects `minecraft-survival` explicitly
+from link:../../deployment-instances/wizardly-hellman/minecraft-survival.json[the
+host-specific declaration]. It is not a legacy A2ML profile and does not change
+the Minecraft service definition.
+
+== Loading and independence
+
+`gsa instance inspect` and `gsa instance logs` require all of `--file`, `--id`,
+and `--host-id`. Each invocation loads only that document into the typed
+deployment registry and selects the exact ID. There is no profile scan, first
+server fallback, implicit instance synthesis, directory scan, VeriSimDB
+requirement, or long-running GSA service dependency. A GSA process or file
+failure therefore cannot prevent Minecraft from starting or running.
+
+The host key is compared as an opaque inventory identifier. This initial
+collector supports local systemd collection only; it does not interpret a host
+key as SSH syntax. Runtime observations are returned separately from the
+declaration and never write back to it.
+
+== Read-only collection
+
+The systemd query is fixed to `Id`, `LoadState`, `ActiveState`, `MainPID`,
+`InvocationID`, `WorkingDirectory`, and `ActiveEnterTimestampMonotonic`. It
+does not request `ExecStart`, environment properties, or full status output.
+For an active unit, the collector reads that `MainPID`'s `/proc` argv, cwd,
+executable link, and start time. It checks process start time before/after the
+read, then re-queries the selected unit and requires the same MainPID and
+InvocationID. It samples realtime, monotonic uptime, and boot ID on the same
+host and rejects a boot-ID change during collection.
+
+The returned projection contains only allowlisted Java memory flags and
+allowlisted Minecraft metadata. Unknown JVM arguments are withheld. The
+collector reads only `server-ip`, `server-port`, and `level-name` from the
+configured properties file; it never serializes that file. Fabric mod manifests
+are reduced to `id` and `version`. Minecraft version metadata comes from the
+installed server artifact; Fabric Loader version comes from the installed
+Fabric server artifact name. Missing or unreadable evidence stays absent.
+
+The configured address/port and the `ss` listener check are separate evidence.
+The socket result is marked observed only when the listener row matches the
+selected systemd MainPID. An unset `server-ip` remains unspecified in config;
+it does not imply that a particular address was configured.
+
+Logs are fetched only with `journalctl --unit` for the selected validated unit,
+with a five-second timeout, a 500-line ceiling, and the shared 64 KiB process
+output limit. Lines containing common credential markers and excess output are
+omitted, as are URL-bearing lines. No lifecycle command is imported or called
+by the collector.
+
+== Qualified declaration and current limits
+
+The verified declaration uses unit `minecraft.service`, working/data directory
+`/opt/minecraft-server`, config `/opt/minecraft-server/server.properties`,
+world `/opt/minecraft-server/world`, TCP 25565, and Minecraft 1.21.11. JVM
+evidence reports `-Xms1G` and `-Xmx2G`; these are the configured heap bounds,
+not a host-wide resource reservation. The live Fabric Loader and mod evidence
+is emitted with its source and observation timestamp.
+
+The instance disables start/stop/restart/update and backup capabilities. The
+Fabric adapter reports `clean_stop_required` as backup-consistency metadata;
+this classification does not enable backup execution. There is no verified
+RCON/console save hook, so a live filesystem copy must not be called
+application-consistent. No backup policy reference is fabricated.
+
+This collector is local and read-only. Remote host transport, authorization,
+durable registry storage, backup execution, lifecycle execution, and the second
+Minecraft instance remain outside this slice. GSA remains an optional control
+plane rather than runtime authority.
+
+== Operator use
+
+Run from the repository root on the declared host, with enough read permission
+for systemd, `/proc`, the allowlisted metadata, `ss`, and the journal:
+
+[source,shell]
+----
+sudo -n ./src/interface/ffi/zig-out/bin/gsa instance inspect \
+  --file deployment-instances/wizardly-hellman/minecraft-survival.json \
+  --id minecraft-survival --host-id wizardly-hellman
+
+sudo -n ./src/interface/ffi/zig-out/bin/gsa instance logs \
+  --file deployment-instances/wizardly-hellman/minecraft-survival.json \
+  --id minecraft-survival --host-id wizardly-hellman --lines 100
+----
+
+These commands inspect a selected instance only. They do not start, stop,
+restart, edit, back up, or otherwise mutate the game service.
