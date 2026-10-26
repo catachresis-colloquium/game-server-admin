@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 //
 // Game Server Admin — Core lifecycle, error handling, and exported C ABI entry
 // points.  Implements the FFI surface declared in src/interface/abi/Foreign.idr.
@@ -31,8 +32,10 @@ test {
     _ = @import("fleet_dispatch.zig");
     _ = @import("instance_capabilities.zig");
     _ = @import("deployment_schema_check.zig");
-    _ = @import("deployment_instance_contract.zig"); // fixture/test-only; no production import
-    _ = @import("minecraft_systemd_inspect.zig"); // read-only fixture adapter; no production import
+    _ = @import("deployment_instance_contract.zig"); // strict contract parser used by fixtures and operator loader
+    _ = @import("minecraft_systemd_inspect.zig"); // allowlisted projection shared by fixture/live collector
+    _ = @import("deployment_instance_loader.zig");
+    _ = @import("minecraft_live_collector.zig");
 }
 pub const groove_client = @import("groove_client.zig");
 pub const steam_client = @import("steam_client.zig");

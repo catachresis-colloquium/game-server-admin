@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 // Typed declarations, independent of JSON persistence and runtime observations.
 const std = @import("std");
 pub const Runtime = enum { systemd, podman, process };
 pub const Protocol = enum { tcp, udp };
-pub const ReadCapability = struct { enabled: bool = false, mode: enum { read_only } = .read_only };
+pub const ReadCapability = struct { enabled: bool = false, mode: enum { @"read-only" } = .@"read-only" };
 pub const Capabilities = struct {
     probe: ReadCapability = .{},
     config: ReadCapability = .{},

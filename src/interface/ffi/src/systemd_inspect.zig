@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 // Internal read-only inspection primitives. No process execution or lifecycle API.
 const std = @import("std");
 pub const ActiveState = enum { active, inactive, failed, activating, deactivating, reloading, maintenance, refreshing };
@@ -23,7 +24,7 @@ pub fn safeUnit(unit: []const u8) bool {
 /// No shell string, Environment, ExecStart, status output, or arbitrary verb.
 pub fn showArguments(unit: []const u8) ![5][]const u8 {
     if (!safeUnit(unit)) return error.InvalidUnit;
-    return .{ "systemctl", "show", "--no-pager", "--property=Id,LoadState,ActiveState,WorkingDirectory,ActiveEnterTimestampMonotonic", unit };
+    return .{ "systemctl", "show", "--no-pager", "--property=Id,LoadState,ActiveState,MainPID,InvocationID,WorkingDirectory,ActiveEnterTimestampMonotonic", unit };
 }
 
 pub fn parse(output: []const u8, requested_unit: []const u8) !Snapshot {

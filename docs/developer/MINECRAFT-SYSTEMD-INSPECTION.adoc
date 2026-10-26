@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
-= Read-only Minecraft/systemd Inspection Prototype
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= Read-only Minecraft/systemd Inspection Projection
 :revdate: 2026-10-25
-:status: internal, fixture-driven; no live collector or production API
+:status: internal projection; fixture-driven tests plus local production collector
 
 == Boundary
 
-This slice is rebased onto deployment-instance-contract while PR #112 awaits
-merge, so both test-only imports coexist. Its inspection interface does not
-require a production registry.
-It accepts an explicit instance ID and unit; it neither derives identity from a
-profile nor needs a production instance registry. The implementation is imported
-only by the unit-test block in main.zig. No C ABI, GUI, profile registry, action
-dispatcher, provisioning script, service, container or live deployment changes.
+`minecraft_systemd_inspect.zig` remains a pure allowlisted projection driven by
+synthetic evidence in tests. The separate
+link:MINECRAFT-PRODUCTION-INSTANCE.adoc[production collector] selects an
+operator-loaded instance ID, gathers local evidence, then feeds that projection.
+Neither module derives identity from a profile or calls lifecycle actions.
 
 systemd_inspect.zig provides a generic bounded property parser and a fixed argv
 plan for systemctl show. It has no executor. minecraft_systemd_inspect.zig accepts
@@ -25,8 +24,9 @@ RCON or console-input paths. Minecraft startup remains independent of GSA.
 Input supplies instance_id, unit, observation Unix seconds, optional same-boot
 CLOCK_MONOTONIC microseconds, systemctl_show, optional process_argv vector,
 server_properties text, version_json, and selected mod_metadata_json payloads.
-Inputs are synthetic in this PR. Unknown raw properties/metadata are discarded;
-they are never included in the report or value-bearing error messages.
+Fixture inputs are synthetic. Production inputs are gathered only by the
+bounded collector. Unknown raw properties/metadata are discarded; they are
+never included in the report or value-bearing error messages.
 
 Each discovered field carries a fixed source/field label and a basis:
 supplied, observed, configured, or derived. Missing optional evidence yields
@@ -54,11 +54,11 @@ including -D options, agents, JAR names, game arguments and unexpected flags, is
 withheld. Collection of JVM flags stops at the first unrecognized token, so
 application arguments after a JAR/class/unknown option cannot be mislabelled.
 Only withheld count is exposed. No shell parsing of ExecStart.
-|minecraft_version |id from explicitly supplied version.json metadata; not the
-version currently running unless a future collector verifies process/artifact
-association.
-|fabric_loader_version, mods |fabric.mod.json id/version metadata; loader ID is
-fabricloader. No mod code is loaded. Duplicate IDs and malformed metadata fail.
+|minecraft_version |id from version.json metadata in the selected installation's
+server artifact, when available. No server JAR code is executed.
+|fabric_loader_version, mods |Loader version from the selected installation's
+Fabric server artifact name; mod IDs/versions from allowlisted `fabric.mod.json`
+fields. No mod code is loaded. Duplicate IDs and malformed metadata fail.
 Selected installed metadata is not proof that a mod is loaded, compatible,
 server-side, or a complete inventory.
 |config_path, world_path |WorkingDirectory/server.properties is a labelled
@@ -88,28 +88,18 @@ negative-test canaries. No full environment, server.properties, raw argv, or
 metadata object is returned. This is field allowlisting, not a guarantee that
 an operator has never embedded a secret in a permitted path/identifier/version.
 
-== Intended later integration and blockers
+== Remaining scope and limits
 
-A future read-only collector should receive an explicitly selected instance,
-invoke only the property plan, bind proc argv to that service's MainPID with
-PID/start-time race checks, sample clocks on the same host/boot, and attach
-artifact paths/revisions and per-source capture times. It must cap time/output,
-authenticate remote sources, avoid environment/ExecStart dumps, handle access
-denied separately from not-found, and use safe file/JAR readers without executing
-JVM/mod code. Socket observations must be process-attributed rather than
-inferred from a port match. Unit scope (system vs user manager) must be explicit.
-
-Blockers for production integration: the instance registry/selection API and
-capability/authorization policy are not approved; no live collector is included.
-An inventory from this prototype must not be promoted into runtime authority.
-No deployment to wizardly-hellman is performed.
+The production collector is currently local-only and Minecraft-specific.
+Remote authenticated reads, other runtime/game adapters, persistent history,
+GUI/API wiring and lifecycle remain out of scope. The service was qualified
+read-only; it was not restarted or modified.
 
 == Verification and sources
 
-Run just test and just test-smoke from the repository root; unit tests read
-fixtures from that root. Zig 0.15.2 is used. Format only the two new modules and
-the touched main.zig; the six existing repository-wide formatting failures are
-outside this contribution.
+The projection and collector tests run with `zig build test`, and the CLI builds
+with `zig build` from `src/interface/ffi`. The live qualification command is
+documented in link:MINECRAFT-PRODUCTION-INSTANCE.adoc[the production note].
 
 * https://www.freedesktop.org/software/systemd/man/257/org.freedesktop.systemd1.html[systemd property semantics]:
   active transition timestamps use microseconds and their named clock.
