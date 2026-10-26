@@ -169,11 +169,24 @@ fn parseUdpTable(a: std.mem.Allocator, text: []const u8) ![]const u16 {
 
 fn observedPorts(a: std.mem.Allocator, host_pid: ?u32) ![]const u16 {
     const pid = host_pid orelse return &.{};
-    const path = try std.fmt.allocPrint(a, "/proc/{d}/net/udp", .{pid});
-    defer a.free(path);
-    const text = try std.fs.cwd().readFileAlloc(a, path, MAX_OUTPUT);
-    defer a.free(text);
-    return parseUdpTable(a, text);
+    var ports: std.ArrayList(u16) = .empty;
+    for ([_][]const u8{ "udp", "udp6" }) |table_name| {
+        const path = try std.fmt.allocPrint(a, "/proc/{d}/net/{s}", .{ pid, table_name });
+        defer a.free(path);
+        const text = try std.fs.cwd().readFileAlloc(a, path, MAX_OUTPUT);
+        defer a.free(text);
+        const parsed = try parseUdpTable(a, text);
+        defer a.free(parsed);
+        for (parsed) |port| {
+            var found = false;
+            for (ports.items) |prior| if (prior == port) {
+                found = true;
+                break;
+            };
+            if (!found) try ports.append(a, port);
+        }
+    }
+    return ports.toOwnedSlice(a);
 }
 
 fn sanitizeLogs(a: std.mem.Allocator, input: []const u8, requested: u16) ![]const u8 {
@@ -253,7 +266,7 @@ pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []c
         .state = try dest.dupe(u8, evidence.state),
         .container_init_pid = pid,
         .sampled_at_unix_seconds = std.time.timestamp(),
-        .evidence_source = "Podman inspect of declared container; ports read from /proc/<container MainPID>/net/udp",
+        .evidence_source = "Podman inspect of declared container; IPv4 and IPv6 UDP tables read from /proc/<container MainPID>/net",
         .configured_ports = try dest.dupe(u16, config_ports),
         .observed_udp_ports = try dest.dupe(u16, observed),
         .data_paths = try copyStrings(dest, declaration.paths.data),
@@ -328,4 +341,9 @@ test "Barotrauma observed UDP evidence parses the selected container network nam
     defer std.testing.allocator.free(ports);
     try std.testing.expectEqual(@as(usize, 1), ports.len);
     try std.testing.expectEqual(@as(u16, 27015), ports[0]);
+    const table6 = "  sl  local_address                         remote_address                        st\n  374: 00000000000000000000000000000000:6987 00000000000000000000000000000000:0000 07\n";
+    const ports6 = try parseUdpTable(std.testing.allocator, table6);
+    defer std.testing.allocator.free(ports6);
+    try std.testing.expectEqual(@as(usize, 1), ports6.len);
+    try std.testing.expectEqual(@as(u16, 27015), ports6[0]);
 }

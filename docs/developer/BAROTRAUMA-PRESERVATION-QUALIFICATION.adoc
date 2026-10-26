@@ -63,11 +63,11 @@ full settings/log dumps are intentionally omitted.
 
 The server console reached `Server started`, which the official guide names as
 its ready indication. It logged Lidgren networking and bound UDP 27015 in the
-selected container namespace. Config declares UDP 27015 and 27016, but 27016 was
-not observed bound. Steam initialization emitted a `SteamNetworkingUtils004`
-failure, so query/browser availability is unverified. No actual client
-connection was attempted. A listener is evidence of a bound socket, not proof of
-external reachability.
+selected container namespace's IPv6 UDP table (the socket is dual-stack).
+Config declares UDP 27015 and 27016, but 27016 was not observed bound. Steam
+initialization emitted a `SteamNetworkingUtils004` failure, so query/browser
+availability is unverified. No actual client connection was attempted. A
+listener is evidence of a bound socket, not proof of external reachability.
 
 The console's campaign setup listed `honeyham.save`; selecting it logged
 `Campaign loaded!` at The City of Seosu. `campaigninfo` returned campaign
