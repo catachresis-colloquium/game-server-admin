@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 // Offline checker for the exact schema subset used here; NOT a full Draft engine.
 const std = @import("std");
 const contract = @import("deployment_instance_contract.zig");
@@ -148,6 +149,25 @@ pub fn checkFixtures(allocator: A) !void {
         try ids.append(a, try a.dupe(u8, parsed.value.id));
         valid_count += 1;
     }
+    var host_directory = try std.fs.cwd().openDir("deployment-instances/wizardly-hellman", .{ .iterate = true });
+    defer host_directory.close();
+    var host_iter = host_directory.iterate();
+    var host_ids = std.StringHashMap(void).init(a);
+    var host_count: usize = 0;
+    while (try host_iter.next()) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".json")) continue;
+        const path = try std.fmt.allocPrint(a, "deployment-instances/wizardly-hellman/{s}", .{entry.name});
+        const input = try read(a, path);
+        const value = try json(a, input);
+        defer value.deinit();
+        try validate(schema.value, value.value);
+        const parsed = try contract.parseInstance(a, input);
+        defer parsed.deinit();
+        if (host_ids.contains(parsed.value.id)) return error.DuplicateInstanceId;
+        try host_ids.put(try a.dupe(u8, parsed.value.id), {});
+        host_count += 1;
+    }
+    if (host_count == 0) return error.MissingHostDeploymentInstances;
     const Case = struct { file: []const u8, zig_error: []const u8, schema_keyword: ?[]const u8 = null, collection: bool = false };
     const manifest = try std.json.parseFromSlice([]Case, a, try read(a, root ++ "invalid-cases.json"), .{ .ignore_unknown_fields = true });
     defer manifest.deinit();
@@ -189,7 +209,7 @@ pub fn checkFixtures(allocator: A) !void {
         invalid_count += 1;
     }
     if (valid_count == 0 or invalid_count != manifest.value.len) return error.MissingFixture;
-    std.debug.print("Zig schema subset and contract: {d} valid / {d} invalid fixtures passed\n", .{ valid_count, invalid_count });
+    std.debug.print("Zig schema subset and contract: {d} valid / {d} invalid fixtures and {d} host declarations passed\n", .{ valid_count, invalid_count, host_count });
 }
 pub fn main() !void {
     try checkFixtures(std.heap.page_allocator);
