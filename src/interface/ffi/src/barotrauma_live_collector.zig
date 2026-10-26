@@ -94,13 +94,21 @@ fn copyStrings(a: std.mem.Allocator, source: []const []const u8) ![]const []cons
     return result;
 }
 
-fn validateRequest(declaration: *const model.Instance, id: []const u8, host_key: []const u8, requested_logs: ?u16) !void {
+fn validateTarget(declaration: *const model.Instance, id: []const u8, host_key: []const u8) !void {
     if (!std.mem.eql(u8, declaration.id, id)) return error.InstanceMismatch;
     if (!std.mem.eql(u8, declaration.host, host_key)) return error.HostMismatch;
-    if (!declaration.capabilities.probe.enabled) return error.ProbeUnsupported;
-    if (requested_logs != null and !declaration.capabilities.logs.enabled) return error.LogsUnsupported;
     if (declaration.runtime.type != .podman) return error.UnsupportedRuntime;
     if (!validContainerName(declaration.runtime.identity)) return error.InvalidContainer;
+}
+
+fn validateProbeRequest(declaration: *const model.Instance, id: []const u8, host_key: []const u8) !void {
+    try validateTarget(declaration, id, host_key);
+    if (!declaration.capabilities.probe.enabled) return error.ProbeUnsupported;
+}
+
+fn validateLogRequest(declaration: *const model.Instance, id: []const u8, host_key: []const u8) !void {
+    try validateTarget(declaration, id, host_key);
+    if (!declaration.capabilities.logs.enabled) return error.LogsUnsupported;
 }
 
 const SettingsPorts = struct { game: ?u16 = null, query: ?u16 = null };
@@ -328,20 +336,46 @@ fn runLogs(a: std.mem.Allocator, argv: []const []const u8, timeout_ms: u32) ![]c
     const result = try process.run(a, argv, false, timeout_ms, &cancel);
     defer a.free(result.output);
     defer a.free(result.error_output);
-    // Podman may return a useful diagnostic on stderr with a nonzero exit.
-    // Timeout, cancellation, transport, and output-limit failures remain errors.
-    if ((result.status != .completed and result.status != .failed) or result.exit_code == null) return error.ReadCommandFailed;
+    // Stderr is part of Podman's log stream only when the command completed
+    // successfully. A failing Podman diagnostic must remain a command failure.
+    if (result.status != .completed or !result.success or result.exit_code == null or result.exit_code.? != 0) return error.ReadCommandFailed;
     return combineLogStreams(a, result.output, result.error_output);
 }
 
-/// Collects from one locally accessible, explicitly selected Podman identity.
-/// This performs reads only and never invokes a lifecycle command.
-pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []const u8, host_key: []const u8, requested_logs: ?u16) !Inspection {
+fn makeLogArgv(a: std.mem.Allocator, identity: []const u8, requested: u16) ![][]const u8 {
+    const lines = try std.fmt.allocPrint(a, "{d}", .{@min(@as(usize, if (requested == 0) 1 else requested), MAX_LOG_LINES)});
+    const argv = try a.alloc([]const u8, 5);
+    argv[0] = "podman";
+    argv[1] = "logs";
+    argv[2] = "--tail";
+    argv[3] = lines;
+    argv[4] = identity;
+    return argv;
+}
+
+/// Retrieves only the explicitly requested container's logs. This has its own
+/// capability gate and does not inspect the container or read probe metadata.
+pub fn collectLogs(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []const u8, host_key: []const u8, requested: u16) ![]const u8 {
     var temporary = std.heap.ArenaAllocator.init(a);
     defer temporary.deinit();
     const scratch = temporary.allocator();
     const declaration = try snapshot.lookup(id);
-    try validateRequest(declaration, id, host_key, requested_logs);
+    try validateLogRequest(declaration, id, host_key);
+    const argv = try makeLogArgv(scratch, declaration.runtime.identity, requested);
+    const full = try runLogs(scratch, argv, 5000);
+    defer scratch.free(full);
+    const safe = try sanitizeLogs(scratch, full, requested);
+    return try a.dupe(u8, safe);
+}
+
+/// Collects from one locally accessible, explicitly selected Podman identity.
+/// This performs reads only and never invokes a lifecycle command.
+pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []const u8, host_key: []const u8) !Inspection {
+    var temporary = std.heap.ArenaAllocator.init(a);
+    defer temporary.deinit();
+    const scratch = temporary.allocator();
+    const declaration = try snapshot.lookup(id);
+    try validateProbeRequest(declaration, id, host_key);
     const identity = declaration.runtime.identity;
 
     const template = "{{.Name}}|{{.Id}}|{{.Image}}|{{.State.Status}}|{{.State.Pid}}";
@@ -352,14 +386,6 @@ pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []c
     const pid: ?u32 = if (std.mem.eql(u8, evidence.state, "running")) try std.fmt.parseInt(u32, evidence.pid, 10) else null;
     const config_ports = try configuredPorts(scratch, declaration);
     const observed = try observedPorts(scratch, pid);
-    var logs: ?[]const u8 = null;
-    if (requested_logs) |line_count| {
-        const lines = try std.fmt.allocPrint(scratch, "{d}", .{@min(@as(usize, if (line_count == 0) 1 else line_count), MAX_LOG_LINES)});
-        const log_argv = [_][]const u8{ "podman", "logs", "--tail", lines, identity };
-        const full = try runLogs(scratch, &log_argv, 5000);
-        defer scratch.free(full);
-        logs = try sanitizeLogs(scratch, full, line_count);
-    }
     const final_raw = try run(scratch, &argv, 5000);
     defer scratch.free(final_raw);
     const final_evidence = try parseInspect(final_raw, identity);
@@ -393,7 +419,7 @@ pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []c
         .declared_game_version = try dest.dupe(u8, declaration.game.version),
         .readiness = null,
         .readiness_source = null,
-        .logs = if (logs) |text| try dest.dupe(u8, text) else null,
+        .logs = null,
     };
 }
 
@@ -406,16 +432,18 @@ test "Barotrauma collector checks selected identity and capabilities before runt
         .game = .{ .version = "1.12.7.0" },
         .capabilities = .{ .probe = .{ .enabled = true }, .config = .{ .enabled = true }, .logs = .{ .enabled = true } },
     };
-    try validateRequest(&declaration, "barotrauma-test", "wizardly-hellman", null);
-    try std.testing.expectError(error.InstanceMismatch, validateRequest(&declaration, "barotrauma-coop", "wizardly-hellman", null));
-    try std.testing.expectError(error.HostMismatch, validateRequest(&declaration, "barotrauma-test", "elsewhere", null));
+    try validateProbeRequest(&declaration, "barotrauma-test", "wizardly-hellman");
+    try validateLogRequest(&declaration, "barotrauma-test", "wizardly-hellman");
+    try std.testing.expectError(error.InstanceMismatch, validateProbeRequest(&declaration, "barotrauma-coop", "wizardly-hellman"));
+    try std.testing.expectError(error.HostMismatch, validateProbeRequest(&declaration, "barotrauma-test", "elsewhere"));
     var disabled_probe = declaration;
     disabled_probe.capabilities.probe.enabled = false;
-    try std.testing.expectError(error.ProbeUnsupported, validateRequest(&disabled_probe, "barotrauma-test", "wizardly-hellman", null));
+    try std.testing.expectError(error.ProbeUnsupported, validateProbeRequest(&disabled_probe, "barotrauma-test", "wizardly-hellman"));
+    try validateLogRequest(&disabled_probe, "barotrauma-test", "wizardly-hellman");
     var disabled_logs = declaration;
     disabled_logs.capabilities.logs.enabled = false;
-    try std.testing.expectError(error.LogsUnsupported, validateRequest(&disabled_logs, "barotrauma-test", "wizardly-hellman", 20));
-    try validateRequest(&disabled_logs, "barotrauma-test", "wizardly-hellman", null);
+    try std.testing.expectError(error.LogsUnsupported, validateLogRequest(&disabled_logs, "barotrauma-test", "wizardly-hellman"));
+    try validateProbeRequest(&disabled_logs, "barotrauma-test", "wizardly-hellman");
     try std.testing.expect(!validContainerName("--help"));
     try std.testing.expect(!validContainerName("container;id"));
     try std.testing.expect(validContainerName("barotrauma-test"));
@@ -465,7 +493,7 @@ test "Barotrauma logs are tail-bounded and secret-marked lines are omitted" {
 
 test "Barotrauma log projection keeps sanitized stderr diagnostics within the shared cap" {
     const a = std.testing.allocator;
-    const stderr_only = try runLogs(a, &.{ "/bin/sh", "-c", "printf 'podman stderr-only diagnostic\\npassword=hidden\\nSteamID=private\\n' >&2; exit 1" }, 1000);
+    const stderr_only = try runLogs(a, &.{ "/bin/sh", "-c", "printf 'podman stderr-only diagnostic\\npassword=hidden\\nSteamID=private\\n' >&2; exit 0" }, 1000);
     defer a.free(stderr_only);
     const safe_stderr_only = try sanitizeLogs(a, stderr_only, 20);
     defer a.free(safe_stderr_only);
@@ -475,6 +503,7 @@ test "Barotrauma log projection keeps sanitized stderr diagnostics within the sh
     const safe = try sanitizeLogs(a, combined, 20);
     defer a.free(safe);
     try std.testing.expectEqualStrings("ordinary stdout\npodman stderr diagnostic", safe);
+    try std.testing.expectError(error.ReadCommandFailed, runLogs(a, &.{ "/bin/sh", "-c", "printf 'podman failed diagnostic\\n' >&2; exit 125" }, 1000));
     try std.testing.expectError(error.OutputTooLarge, combineLogStreams(a, &([_]u8{'a'} ** MAX_OUTPUT), "b"));
 }
 
