@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+[Unit]
+Description=Disposable Minecraft Fabric test instance
+After=network.target
+
+[Service]
+Type=simple
+User=minecraft-test
+Group=minecraft-test
+WorkingDirectory=/opt/minecraft-test
+ExecStart=/usr/bin/java -Xms512M -Xmx1G -jar fabric-server.jar nogui
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGINT
+TimeoutStartSec=300
+TimeoutStopSec=120
+SuccessExitStatus=0 130 143
+MemoryAccounting=true
+MemoryMax=1280M
+OOMScoreAdjust=200
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/opt/minecraft-test
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
