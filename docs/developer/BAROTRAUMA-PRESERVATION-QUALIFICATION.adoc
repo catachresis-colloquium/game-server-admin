@@ -1,0 +1,136 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= Barotrauma Preservation and Read-only Qualification
+:revdate: 2026-10-26
+:status: disposable qualification; lifecycle and backup not approved
+
+== Preserved deployment inventory
+
+The preserved rootless Podman container `joshua-barotrauma-vps` remains stopped
+and unchanged. Its container ID is
+`a8b6ed4d6c323897de7aa5e0014dadf1d6f97dec8f0eb94849f8f268040fd32a`; it exits
+with status 143. Its image ID is
+`0f24b5f32efb2c4192da76bf5d783194978105eaff39121c12b87e3f7cf5ef60`, with local
+digest `sha256:c1a05f2cd45599f7e63c64f04887f9fb676e9475cf9faee802e4f40665acefa6`.
+The mounted rootless volume is
+`11b2c5ac72fd52034dbc64ec5df07ff1519d0f9a06e94a58a0266affb16a3e6d`.
+
+The volume contains the complete server install, `serversettings.xml`,
+`Data/clientpermissions.xml`, `honeyham.save`,
+`honeyham_CharacterData.xml`, historical `ServerLogs`, and user-data campaign
+state. The save companion and permission/config files were included in the
+offline copy. Active mod configuration was not independently resolved; LocalMods
+and workshop/content metadata were preserved as data rather than interpreted.
+
+The offline preservation set is at
+`/home/joshua/backups/barotrauma-preservation-20261026` with mode 0700. It
+contains OCI image export, container rootfs export, complete numeric-owner volume
+and config archives, sanitized inventory/tree manifests, and checksums. Both the
+archive checksum list and critical-state checksums verified. SHA-256 of the
+original `honeyham.save` remains
+`7ad80e84e2d62386753f08a52e6a6f20621196ce3aac685400fe5797e3f0da23` after the
+qualification runs. Private container inspect data is mode 0600 and is not
+included in this repository.
+
+== Disposable restore results
+
+The restore uses a separate rootless volume and fresh writable container layer.
+No original volume or container layer was reused. It runs as container user
+`barotrauma`, with a 1 GiB memory limit and loopback-only UDP mappings 27215 and
+27216 to container ports 27015 and 27016. No public firewall rule was changed.
+The host could not apply a CPU quota because the cgroup CPU controller is
+unavailable.
+
+The preserved image reports `Barotrauma Dedicated Server 1.12.7.0`,
+`ReleaseLinux`, branch `release/spring-update-2026-hotfix-1`, revision
+`0f43ab4f11`. The installed Steam manifest identifies Dedicated Server AppID
+1026340, build 22833785. The official hosting guide documents anonymous SteamCMD
+installation with `app_update 1026340 validate`, execution of `DedicatedServer`,
+and UDP defaults 27015/27016; it also warns its information may be outdated.
+This qualification restored the preserved build and did not update it. The
+official guide currently reports game version 1.13.4.0, so the preserved image
+is not evidence of the latest release. [B1]
+
+The actual entry is `/usr/bin/tini -- /entrypoint.sh`, followed by
+`./DedicatedServer -port 27015` from `/home/barotrauma/server`; the executable is
+`/home/barotrauma/server/DedicatedServer`. The bind-mounted
+`/config/serversettings.xml` is copied to the install root and has the same
+checksum as the archived config. The campaign is under
+`Daedalic Entertainment GmbH/Barotrauma/Multiplayer`; permissions are in
+`Data/clientpermissions.xml`. Host log files are under `ServerLogs`, with
+container output available through Podman logs. Sensitive config values and
+full settings/log dumps are intentionally omitted.
+
+The server console reached `Server started`, which the official guide names as
+its ready indication. It logged Lidgren networking and bound UDP 27015 in the
+selected container namespace's IPv6 UDP table (the socket is dual-stack).
+Config declares UDP 27015 and 27016, but 27016 was not observed bound. Steam
+initialization emitted a `SteamNetworkingUtils004` failure, so query/browser
+availability is unverified. No actual client connection was attempted. A
+listener is evidence of a bound socket, not proof of external reachability.
+
+The console's campaign setup listed `honeyham.save`; selecting it logged
+`Campaign loaded!` at The City of Seosu. `campaigninfo` returned campaign
+location and money, confirming the campaign was parsed and usable in the lobby.
+The test server then began a round which ended because no crew was present. The
+copied `clientpermissions.xml` and config hashes matched the preservation source.
+
+== Shutdown and backup classification
+
+With a disposable campaign loaded, `money 1` changed the displayed balance from
+8882 to 8883. `podman stop --time 30` terminated the process with status 143 and
+no application save acknowledgement. The stopped test volume was archived and
+restored into a second disposable container. Loading that archive reported
+8882, not 8883. The archive reproduced the files byte-for-byte, but the runtime
+mutation did not survive the stop. Therefore Podman stop/SIGTERM is not a
+verified campaign checkpoint, and no `save` console command exists in this
+build. A clean-stop-required backup remains unproven; GSA backup is classified
+unsupported pending a client-driven checkpoint and repeatable restore test.
+
+The absence of an active round is not treated as proof of application
+consistency. No lifecycle operation is approved for GSA. The server remains
+independent of GSA and VeriSimDB.
+
+== Smallest GSA boundary
+
+The isolated qualification declaration is
+`deployment-instances/qualification/barotrauma-test.json`. It explicitly names
+`barotrauma-test`, profile `barotrauma`, and Podman identity `barotrauma-test`.
+The collector uses a fixed-field Podman inspect, reads only allowlisted config
+port attributes, reads UDP sockets through the selected container init
+`/proc/<pid>/net/udp`, and bounds/sanitizes explicit log tails. It returns
+readiness as unknown because a container active state is not the game's ready
+signal. Lifecycle and backup capabilities are disabled in the declaration.
+There is no discovery, update, save, or write path.
+
+This is a read-only qualification adapter only. It does not establish that the
+preserved container can be adopted permanently: its old server build, absent
+observed query socket, Steam initialization failure, and unverified checkpoint
+and client paths must be resolved first.
+
+== Legacy profile audit
+
+[cols="2,3"]
+|===
+| Assumption | Classification
+
+| Dedicated Server AppID 1026340 | VERIFIED CURRENT for this preserved install; also documented upstream [B1]
+| Linux `DedicatedServer` executable | VERIFIED CURRENT in restored image
+| UDP 27015 game port | VERIFIED CURRENT as configured and observed bound
+| UDP 27016 query port / A2S | UNKNOWN/UNSUPPORTED in this run; configured but no socket observed
+| XML `serversettings.xml` | VERIFIED CURRENT; bind file is copied to the install root when readable
+| Save and character sidecars | VERIFIED CURRENT under the user-data Multiplayer path
+| Hardcoded `barotrauma` lifecycle target | STALE for the preserved `joshua-barotrauma-vps` identity; unsafe to retain
+| Update action targeting `/opt/barotrauma` | STALE for the verified `/home/barotrauma/server` installation
+| SIGTERM/Podman stop guarantees save | UNSUPPORTED by experiment
+| Live tar is application-consistent | UNSUPPORTED; no checkpoint path proved
+|===
+
+No A2ML data was changed. Corrective changes should follow a separately reviewed
+deployment migration, not silently preserve these stale action targets.
+
+== Sources
+
+* [B1] https://www.barotraumagame.com/wiki/Hosting_a_Dedicated_Server[Official Barotrauma dedicated-server hosting guide]. The page itself warns its details may be outdated.
+* https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaServer/ServerSource/GameSession/GameModes/MultiPlayerCampaign.cs[Upstream campaign load implementation].
+* https://github.com/FakeFishGames/Barotrauma/blob/master/Barotrauma/BarotraumaShared/SharedSource/Utils/SaveUtil.cs[Upstream save utilities].

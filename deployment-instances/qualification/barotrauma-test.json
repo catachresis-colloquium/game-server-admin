@@ -1,0 +1,51 @@
+{
+  "contract": {
+    "name": "gsa.deployment-instance",
+    "version": "0.1.0"
+  },
+  "id": "barotrauma-test",
+  "profile_id": "barotrauma",
+  "host": "wizardly-hellman",
+  "runtime": {
+    "type": "podman",
+    "identity": "barotrauma-test"
+  },
+  "ports": [
+    { "protocol": "udp", "port": 27015, "purpose": "game" },
+    { "protocol": "udp", "port": 27016, "purpose": "query-configured" }
+  ],
+  "paths": {
+    "data": ["/home/joshua/.local/share/containers/storage/volumes/barotrauma-test-data/_data"],
+    "config": [
+      "/home/joshua/backups/barotrauma-test-qualification-20261026/config/serversettings.xml",
+      "/home/joshua/.local/share/containers/storage/volumes/barotrauma-test-data/_data/serversettings.xml"
+    ],
+    "world": ["/home/joshua/.local/share/containers/storage/volumes/barotrauma-test-data/_data/Daedalic Entertainment GmbH/Barotrauma/Multiplayer"]
+  },
+  "game": {
+    "version": "1.12.7.0",
+    "update_channel": null,
+    "mods": []
+  },
+  "resources": {
+    "memory": {
+      "minimum": null,
+      "maximum": "1G"
+    }
+  },
+  "backup": {
+    "policy_ref": null
+  },
+  "capabilities": {
+    "probe": { "enabled": true, "mode": "read-only" },
+    "config": { "enabled": true, "mode": "read-only" },
+    "logs": { "enabled": true, "mode": "read-only" },
+    "lifecycle": {
+      "start": false,
+      "stop": false,
+      "restart": false,
+      "update": false
+    },
+    "backup": { "enabled": false }
+  }
+}

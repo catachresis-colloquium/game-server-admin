@@ -23,6 +23,7 @@ const deployment_registry = @import("deployment_registry.zig");
 const deployment_loader = @import("deployment_instance_loader.zig");
 const minecraft_live = @import("minecraft_live_collector.zig");
 const cryofall_live = @import("cryofall_live_collector.zig");
+const barotrauma_live = @import("barotrauma_live_collector.zig");
 
 /// Check if a file exists (Zig 0.15.2 compat — no std.fs.exists).
 fn fileExists(path: []const u8) bool {
@@ -250,6 +251,55 @@ fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File)
                 .configured_port_source = report.configured_port_source,
                 .backup_mode = report.backup_mode,
                 .backup_evidence = report.backup_evidence,
+            };
+            const json = std.json.Stringify.valueAlloc(a, safe_output, .{ .whitespace = .indent_2 }) catch {
+                err.writeAll("Inspection serialization failed.\n") catch {};
+                std.process.exit(1);
+            };
+            defer a.free(json);
+            out.writeAll(json) catch {};
+            out.writeAll("\n") catch {};
+        }
+    } else if (std.mem.eql(u8, target.profile_id, "barotrauma")) {
+        if (std.mem.eql(u8, action, "logs")) {
+            const safe_logs = barotrauma_live.collectLogs(a, &snapshot, id.?, host.?, lines) catch |failure| {
+                var message: [256]u8 = undefined;
+                const text = std.fmt.bufPrint(&message, "Read-only Barotrauma log retrieval failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Log retrieval failed.\n";
+                err.writeAll(text) catch {};
+                std.process.exit(1);
+            };
+            defer a.free(safe_logs);
+            out.writeAll(safe_logs) catch {};
+            out.writeAll("\n") catch {};
+            return;
+        }
+        var report = barotrauma_live.collect(a, &snapshot, id.?, host.?) catch |failure| {
+            var message: [256]u8 = undefined;
+            const text = std.fmt.bufPrint(&message, "Read-only Barotrauma inspection failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Read-only inspection failed.\n";
+            err.writeAll(text) catch {};
+            std.process.exit(1);
+        };
+        defer report.deinit();
+        {
+            const safe_output = .{
+                .instance_id = report.instance_id,
+                .profile_id = report.profile_id,
+                .host = report.host,
+                .runtime_identity = report.container,
+                .container_id = report.container_id,
+                .image_id = report.image_id,
+                .state = report.state,
+                .container_init_pid = report.container_init_pid,
+                .sampled_at_unix_seconds = report.sampled_at_unix_seconds,
+                .evidence_source = report.evidence_source,
+                .configured_ports = report.configured_ports,
+                .observed_udp_ports = report.observed_udp_ports,
+                .data_paths = report.data_paths,
+                .config_paths = report.config_paths,
+                .world_paths = report.world_paths,
+                .declared_game_version = report.declared_game_version,
+                .readiness = report.readiness,
+                .readiness_source = report.readiness_source,
             };
             const json = std.json.Stringify.valueAlloc(a, safe_output, .{ .whitespace = .indent_2 }) catch {
                 err.writeAll("Inspection serialization failed.\n") catch {};

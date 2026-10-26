@@ -37,6 +37,7 @@ test {
     _ = @import("deployment_instance_loader.zig");
     _ = @import("minecraft_live_collector.zig");
     _ = @import("cryofall_live_collector.zig");
+    _ = @import("barotrauma_live_collector.zig");
 }
 pub const groove_client = @import("groove_client.zig");
 pub const steam_client = @import("steam_client.zig");
