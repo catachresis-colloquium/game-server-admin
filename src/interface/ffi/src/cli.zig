@@ -261,17 +261,26 @@ fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File)
             out.writeAll("\n") catch {};
         }
     } else if (std.mem.eql(u8, target.profile_id, "barotrauma")) {
-        var report = barotrauma_live.collect(a, &snapshot, id.?, host.?, if (std.mem.eql(u8, action, "logs")) lines else null) catch |failure| {
+        if (std.mem.eql(u8, action, "logs")) {
+            const safe_logs = barotrauma_live.collectLogs(a, &snapshot, id.?, host.?, lines) catch |failure| {
+                var message: [256]u8 = undefined;
+                const text = std.fmt.bufPrint(&message, "Read-only Barotrauma log retrieval failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Log retrieval failed.\n";
+                err.writeAll(text) catch {};
+                std.process.exit(1);
+            };
+            defer a.free(safe_logs);
+            out.writeAll(safe_logs) catch {};
+            out.writeAll("\n") catch {};
+            return;
+        }
+        var report = barotrauma_live.collect(a, &snapshot, id.?, host.?) catch |failure| {
             var message: [256]u8 = undefined;
             const text = std.fmt.bufPrint(&message, "Read-only Barotrauma inspection failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Read-only inspection failed.\n";
             err.writeAll(text) catch {};
             std.process.exit(1);
         };
         defer report.deinit();
-        if (std.mem.eql(u8, action, "logs")) {
-            if (report.logs) |safe_logs| out.writeAll(safe_logs) catch {};
-            out.writeAll("\n") catch {};
-        } else {
+        {
             const safe_output = .{
                 .instance_id = report.instance_id,
                 .profile_id = report.profile_id,
