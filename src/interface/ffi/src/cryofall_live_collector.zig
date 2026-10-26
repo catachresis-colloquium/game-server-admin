@@ -9,6 +9,7 @@ const process = @import("bounded_process.zig");
 
 pub const MAX_OUTPUT = 65536;
 pub const MAX_LOG_LINES = 200;
+const MAX_LOG_SUFFIX_BYTES = 1024 * 1024;
 pub const Socket = struct { port: u16, address: []const u8, pid: u32, source: []const u8 };
 pub const Inspection = struct {
     arena: std.heap.ArenaAllocator,
@@ -205,14 +206,32 @@ fn latestServerLog(a: std.mem.Allocator, data_path: []const u8) !?[]const u8 {
     return latest;
 }
 
+fn validNumericVersion(version: []const u8) bool {
+    if (version.len == 0) return false;
+    var components = std.mem.splitScalar(u8, version, '.');
+    var count: usize = 0;
+    while (components.next()) |component| {
+        if (component.len == 0) return false;
+        for (component) |character| if (!std.ascii.isDigit(character)) return false;
+        count += 1;
+    }
+    return count >= 2;
+}
+
+fn parseVersionFilename(name: []const u8) ?[]const u8 {
+    if (!std.mem.startsWith(u8, name, "Version ")) return null;
+    const version = name["Version ".len..];
+    if (!validNumericVersion(version)) return null;
+    return version;
+}
+
 fn parseInstalledVersion(text: []const u8) ?[]const u8 {
     const line = std.mem.trim(u8, text, "\xef\xbb\xbf\r\n \t");
-    if (!std.mem.startsWith(u8, line, "Version ")) return null;
-    const rest = line["Version ".len..];
-    const end = std.mem.indexOfAny(u8, rest, " (\r\n") orelse rest.len;
-    const version = rest[0..end];
-    if (version.len == 0) return null;
-    for (version) |character| if (!(std.ascii.isDigit(character) or character == '.')) return null;
+    const content = if (std.mem.startsWith(u8, line, "Version ")) line["Version ".len..] else line;
+    const end = std.mem.indexOfScalar(u8, content, ' ') orelse content.len;
+    const version = content[0..end];
+    if (!validNumericVersion(version)) return null;
+    if (end < content.len and !std.mem.eql(u8, content[end..], " (Server, NetCore)")) return null;
     return version;
 }
 
@@ -222,12 +241,14 @@ fn installedVersion(a: std.mem.Allocator, data_path: []const u8) !?[]const u8 {
     defer directory.close();
     var iterator = directory.iterate();
     while (try iterator.next()) |entry| {
-        if (entry.kind != .file or !std.mem.startsWith(u8, entry.name, "Version ")) continue;
+        if (entry.kind != .file) continue;
+        const filename_version = parseVersionFilename(entry.name) orelse continue;
         const path = try std.fs.path.join(a, &.{ root_path, entry.name });
         const bytes = readFile(a, path, 1024) catch continue;
         defer a.free(bytes);
         const version = parseInstalledVersion(bytes) orelse continue;
-        return try a.dupe(u8, version);
+        if (!std.mem.eql(u8, filename_version, version)) continue;
+        return try a.dupe(u8, filename_version);
     }
     return null;
 }
@@ -240,7 +261,20 @@ fn currentRunActivated(log: []const u8) ?bool {
 
 fn logTail(a: std.mem.Allocator, log: []const u8, lines: u16) ![]const u8 {
     const tail = if (log.len > MAX_OUTPUT) log[log.len - MAX_OUTPUT ..] else log;
-    return sanitizeLogs(a, tail, lines);
+    return sanitizeLogs(a, std.mem.trimEnd(u8, tail, "\r\n"), lines);
+}
+
+fn readLogSuffixFromFile(a: std.mem.Allocator, file: *std.fs.File) ![]u8 {
+    const file_size = (try file.stat()).size;
+    const read_size = @min(file_size, MAX_LOG_SUFFIX_BYTES);
+    try file.seekTo(file_size - read_size);
+    return file.readToEndAlloc(a, MAX_LOG_SUFFIX_BYTES);
+}
+
+fn readLogSuffix(a: std.mem.Allocator, path: []const u8) ![]u8 {
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+    return readLogSuffixFromFile(a, &file);
 }
 
 fn findPort(sockets: []const Socket, expected: u16, pid: u32) bool {
@@ -372,7 +406,7 @@ pub fn collect(allocator: std.mem.Allocator, snapshot: *const registry.Snapshot,
     const game_data = try std.fs.path.join(a, &.{ data, "Data" });
     if (declaration.capabilities.logs.enabled) {
         if (try latestServerLog(a, game_data)) |log_path| {
-            if (readFile(a, log_path, 8 * 1024 * 1024)) |raw| {
+            if (readLogSuffix(a, log_path)) |raw| {
                 defer a.free(raw);
                 if (active) world_activated = currentRunActivated(raw);
                 if (requested_log_lines) |count| log_text = try logTail(a, raw, count);
@@ -524,6 +558,26 @@ test "CryoFall logs are bounded and secret-bearing lines are omitted" {
     try std.testing.expectError(error.OutputTooLarge, sanitizeLogs(a, &[_]u8{'x'} ** (MAX_OUTPUT + 1), 10));
 }
 
+test "CryoFall large logs use a bounded suffix for activation and requested tail" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var file = try tmp.dir.createFile("large-server.log", .{ .read = true });
+    defer file.close();
+    const block = [_]u8{'x'} ** 65536;
+    for (0..129) |_| try file.writeAll(&block);
+    try file.writeAll("\nCryoFall game server runtime current\nServer world activated\nlate log line one\nlate log line two\n");
+
+    const a = std.testing.allocator;
+    const suffix = try readLogSuffixFromFile(a, &file);
+    defer a.free(suffix);
+    try std.testing.expect(suffix.len <= MAX_LOG_SUFFIX_BYTES);
+    try std.testing.expect(suffix.len < 8 * 1024 * 1024);
+    try std.testing.expectEqual(@as(?bool, true), currentRunActivated(suffix));
+    const tail = try logTail(a, suffix, 2);
+    defer a.free(tail);
+    try std.testing.expectEqualStrings("late log line one\nlate log line two", tail);
+}
+
 test "CryoFall systemd parser rejects unit mismatch and malformed runtime state" {
     const good = "Id=cryofall-test.service\nLoadState=loaded\nActiveState=active\nMainPID=4123\nInvocationID=abc\nWorkingDirectory=/opt/cryofall-test/Binaries/Server\nActiveEnterTimestampMonotonic=1000000\n";
     const parsed = try parseUnit(good, "cryofall-test.service");
@@ -550,7 +604,13 @@ test "CryoFall install fixture records the verified server package and .NET runt
         try std.testing.expect(std.mem.indexOf(u8, tree, path) != null);
     }
     try std.testing.expect(std.mem.indexOf(u8, tree, "CryoFall_Server.x86_64") == null);
+    try std.testing.expectEqualStrings("1.33.1.15", parseVersionFilename("Version 1.33.1.15").?);
+    try std.testing.expectEqualStrings("1.33.1.15", parseInstalledVersion("1.33.1.15 (Server, NetCore)\r\n").?);
     try std.testing.expectEqualStrings("1.33.1.15", parseInstalledVersion("\xef\xbb\xbfVersion 1.33.1.15 (Server, NetCore)\r\n").?);
+    try std.testing.expect(parseVersionFilename("Version 1..33.1.15") == null);
+    try std.testing.expect(parseVersionFilename("Version 1.33.1.15-extra") == null);
+    try std.testing.expect(parseInstalledVersion("CryoFall Dedicated Server 1.33.1.15") == null);
+    try std.testing.expect(parseInstalledVersion("1.33.1.15 (Client, NetCore)") == null);
     try std.testing.expect(parseInstalledVersion("Version latest (Server)\n") == null);
 }
 
