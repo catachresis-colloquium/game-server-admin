@@ -53,6 +53,7 @@ _You build GSA, extend it, or contribute code across the Gossamer GUI → Zig FF
 | `docs/developer/MINECRAFT-PRODUCTION-INSTANCE.adoc` | production read-only | Explicit operator-loaded Minecraft instance and live collection qualification
 | `docs/developer/CRYOFALL-RECONCILIATION.adoc` | disposable qualification | Verified Steam distribution, runtime, ports, stop/backup safety, and retired assumptions
 | `docs/developer/BAROTRAUMA-DST-ADAPTER-RECON.adoc` | design | Barotrauma checkpoint/control-path limits and unresolved DST topology
+| `docs/developer/BAROTRAUMA-PRESERVATION-QUALIFICATION.adoc` | disposable qualification | Preserved-state copy/restore, runtime evidence and read-only GSA boundary
 | `docs/developer/ACTIVE-INSTANCE-RESOURCE-GROUPS.adoc` | design | Optional exclusivity/resource groups; design only
 | `docs/developer/PANEL-EXTENSION-GUIDE.adoc` | live | Panel anatomy + the clade system; `nexus-setup` as the worked example; the `host.html` wiring points
 | `docs/wikis/05-The-Proven-ABI.md` | live | The machine-checked ABI contract (codegen pipeline, 18 codes, linear handles) — the differentiator, illustrated
