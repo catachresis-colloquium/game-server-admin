@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= BostonUnlocked / Shadowrun Chronicles: Boston Lockdown Qualification
+:revdate: 2026-10-26
+:status: source-audited, runtime-blocked
+
+== Result
+
+This is a source and documentation qualification, not a completed server
+qualification. The current BostonUnlocked project is a community reimplementation
+of the final public client, not the defunct original official server. Its own
+README describes it as work in progress and says that the project needs official
+client files to operate. The latest inspected `main` commit was
+`9518142003d63edd09f8d55a28e8bbd3dd57b7aa` (2026-10-21, tag `20261021.1`). The
+project's documentation says the community-hosted server moved to MADE in June
+2026. [S1] [S2] [S3]
+
+The repository is build-oriented toward Windows and .NET Framework 4.8. Its
+portable socket code suggests that the gameplay host may be runnable under a
+compatible Linux runtime, but that is not verified. Linux viability is therefore
+*unknown*, not supported or disproved. Runtime work stopped at the operator
+asset/toolchain boundary: this environment has no Shadowrun client installation,
+the extracted client dependencies/static data/StreamingAssets are incomplete,
+and no `dotnet`, Mono, MSBuild, or PowerShell runtime is installed. No server was
+built or started, and no client, listener, shutdown, backup, or restore test was
+performed.
+
+No GSA adapter, A2ML profile, instance file, or GSA runtime dependency was added.
+The existing deployment-instance shape can carry a string `profile_id` without
+schema changes, but GSA has no BostonUnlocked game profile today. Do not invent a
+profile or imply that a client-derived identifier is a reviewed profile. Select
+and document a stable profile/game identifier before registering a production
+instance. This is not a reason to change the contract or import BostonUnlocked
+types into GSA.
+
+== Project and build boundary
+
+The authoritative implementation is
+link:https://github.com/BostonUnlocked/BostonUnlockedServer[BostonUnlockedServer].
+The project website is
+link:https://bostonunlocked.github.io/BostonUnlockedDocs/[BostonUnlockedDocs].
+The inspected source revision is pinned above so that the findings can be
+rechecked against later `main` changes. [S1] [S2]
+
+The self-host guide documents a Windows 10+ setup using PowerShell and the .NET
+Framework 4.8 Developer Pack/MSBuild. The checked-in Host and Core projects target
+`net48` and x64; the official build workflow runs on `windows-latest`. The
+separate optional Supervisor project targets `net8.0-windows` and uses Windows
+Service Control Manager integration. The self-host guide gives no verified Linux
+server runtime procedure. Windows is the documented/tested build platform; the
+documentation's Linux instructions concern client patching and must not be read
+as Linux server support. [S4] [S5] [S6]
+
+The main Host links `System.ServiceProcess` for its Windows service mode. Its
+console mode instead handles Ctrl+C and starts the same runtime. The Core uses
+managed `TcpListener` sockets; the inspected source did not show IIS, HTTP.sys,
+registry access, or kernel32 bindings in the gameplay host. This makes a Mono
+experiment plausible, but not proven. The checked-in SQLite native binary is a
+Windows x86-64 PE DLL, so a Linux build/run must explicitly establish native
+SQLite resolution rather than assuming the bundled file works. The optional
+Supervisor is Windows-specific and is not required by the Host. [S5] [S6] [S7]
+
+The upstream launch script builds the Host and starts
+`server/src/Shadowrun.LocalService.Host/bin/Release/Shadowrun.LocalService.Host.exe`
+from a PowerShell prompt with:
+
+[source,powershell]
+----
+powershell -ExecutionPolicy Bypass -File .\server\start_localserver.ps1
+----
+
+The resulting Host invocation has defaults equivalent to:
+
+[source,shell]
+----
+Shadowrun.LocalService.Host.exe --host 0.0.0.0 --port 80 --aplay-port 5055 --photon-port 4530 --use-sqlite
+----
+
+The script also accepts bind/port and persistence options. Its build/post-build
+steps include Windows PowerShell, `xcopy`, `robocopy`, and MSBuild assumptions;
+this script is not a portable Linux deployment recipe. It also force-stops
+processes named `Shadowrun.LocalService.Host` before building, so this script is
+not safe for launching a second same-named instance while one is already
+running. The binary itself accepts independent bind/port options. Multiple
+instances may be possible with separate executable/log locations, working
+directories/data folders, and non-conflicting ports, but the upstream launch
+script does not establish that and no multi-instance test was run. [S5] [S6]
+
+== Client-derived input and Python tooling
+
+The source reimplementation contains no proprietary game code or assets, but it
+requires files from an operator's legitimately installed supported Steam client
+(Steam AppID `267750`, client version `23.3.28073.265425`). The documented
+extraction step copies required
+client DLLs into `server/src/Dependencies`, copies `Shadowrun_Data/StreamingAssets`
+(excluding `*.unity3d`), and extracts named static-data JSON from
+`Shadowrun_Data/resources.assets`. Those outputs are ignored/generated inputs;
+they are not committed as GSA fixtures. The official extractor uses Python 3 and
+UnityPy for the `resources.assets` extraction. [S1] [S4] [S8]
+
+The extractor's client-derived assembly list is `APlayCommon.dll`,
+`Cliffhanger.ChatAndFriends.Interfaces.dll`,
+`Cliffhanger.Core.Compatibility.dll`, `Cliffhanger.GameLogic.dll`,
+`Cliffhanger.SRO.ServerClientCommons.dll`, `Ionic.Zip.dll`, `JsonFx.Json.dll`,
+`PhotonProxy.AccountSystem.Client.DTO.dll`,
+`PhotonProxy.ChatAndFriends.Client.DTO.dll`, `PhotonProxy.Common.dll`,
+`PhotonProxy.Serializer.Client.dll`, `protobuf-net.dll`, and
+`SRO.Core.Compatibility.dll`. The repository separately tracks its SQLite
+provider/native files; the other extracted client inputs are unavailable here.
+
+Python is not part of the server runtime. `tools/patch_embedded_configs.py` is a
+client-side tool: it edits the operator's `Shadowrun_Data/resources.assets` so
+the game client uses a selected server hostname, and supports restoring the
+original asset from its backup. The Windows `.exe` is a wrapper/alternative for
+that patch operation. The guide explicitly directs Linux and Windows 7 users to
+the Python patch path. It changes hostnames while retaining configured ports; it
+does not itself provide a complete arbitrary-port deployment setup. [S4] [S9]
+
+The self-host update instructions are operator-controlled: stop the Host, back
+up its data folder, pull the source repository, then rebuild/restart and verify
+state. The optional Supervisor has a separate Windows-service workflow. GSA must
+not treat either `git pull` or the Supervisor as an implicit updater; update
+behavior and version rollback remain outside this qualification. [S5] [S14]
+
+No client executable or `resources.assets` was found in the available Steam,
+home, `/mnt`, or `/opt` trees. Required extracted DLLs, static data, and
+StreamingAssets are consequently unavailable. The exact unblock condition for
+build/runtime qualification is an operator-provided supported Steam client
+installation (or its locally extracted required inputs) and an installed
+compatible build toolchain. No client-derived files should be uploaded, committed,
+or copied into GSA fixtures.
+
+== Runtime topology and endpoints
+
+In the inspected Host source, one `LocalServiceRuntime` constructs and starts
+three server objects on three worker threads, all sharing one options object,
+logger, user store, identity/session state, and stop event:
+
+[cols="1,2,2,2",options="header"]
+|===
+|Component in Host process | Default endpoint | Protocol | Source-level role
+|HTTP stub | TCP 80 | TCP | Config/launcher files, account and related HTTP routes, patch content, status page
+|APlay stub | TCP 5055 | TCP | Game's APlay client protocol
+|Photon proxy stub | TCP 4530 | TCP | Chat/friends/Photon-compatible proxy protocol
+|===
+
+All three port numbers and the bind host are configurable. The source creates
+`TcpListener` instances for each; no UDP listener was found for these three
+services. These are *source-confirmed defaults and socket types*, not observed
+listeners: the host has not been run in this qualification. [S5] [S10] [S11]
+
+TCP 80 is not mandatory. The Host accepts `--port` and the PowerShell launcher
+exposes `-Port`. The served `config.xml` contains the HTTP URLs and the APlay and
+Photon host:port endpoints consumed by the client. A local-only qualification can
+therefore use loopback and high ports, but must update the disposable served
+configuration to match the chosen ports and patch a disposable client to the
+test host. The public client patcher rewrites hostnames while preserving existing
+ports. No port 80 binding, Nginx edit, or public firewall opening is necessary
+for source-level qualification; none was attempted here. [S4] [S5] [S9]
+
+The HTTP status page is documented and the code logs successful listener startup
+for each thread. Those signals can establish HTTP availability and individual
+socket binds, but do not prove that a game client authenticated or that all game
+protocols are operational. No separate health/query protocol was identified.
+Actual client reachability and application readiness remain unknown until a
+supported disposable client completes login and enters usable game state. [S3]
+[S5] [S10]
+
+== Runtime, identity, and persistent state
+
+The gameplay server is one process with three listeners, not three independent
+game processes. Its optional `Shadowrun.LocalService.Supervisor` is a distinct
+.NET 8 Windows service that can manage/restart/update a target Host and use a
+Discord bot; it is not created by the local-server script and is not required for
+the Host to run. Do not treat it as a required game component or copy its
+Windows-service dependency into a GSA deployment. The Host process is the natural
+runtime identity if later deployed under one systemd unit or container. [S5] [S6]
+
+The default persistent data directory is `./data` when that directory exists in
+the Host working directory; otherwise it falls back to the current user's
+`LocalApplicationData/ShadowrunLocalService/data`. The default SQLite database
+is `localservice.sqlite`; the Host defaults to SQLite and creates tables for
+accounts, Steam identities, credential identities, player info, and friends.
+Account JSON includes career/account state. A legacy JSON mode also uses
+`account.json`, `friends.json`, `playerinfo.json`, and `sessions.json`. Admin
+account IDs are held in `chat-admins.json`. Request logs are written next to the
+executable under `logs/` (events, diagnostics, and player bug reports), with
+rotation/retention settings. These paths come from source defaults, not a live
+installation. Career records include player character progression and inventory
+state; match/session runtime state is partly held in process memory. [S7] [S12]
+[S13]
+
+The SQLite implementation uses transactions and enables WAL mode. Upstream's
+server-data guide says to stop the server before copying the complete data
+folder. Accordingly, a live file copy is not qualified as consistent. The docs'
+stop-and-copy procedure is not a tested backup/restore result: no disposable
+known-state change or second restore was possible here. GSA backup must remain
+*unsupported* until such a test succeeds. [S7] [S14]
+
+The documented console shutdown path is Ctrl+C. In source, Ctrl+C sets the shared
+stop event, listener threads close their sockets, and the Host joins those
+threads. Windows-service mode handles `OnStop` through that same stop/join path.
+No separate application console command was identified. SIGTERM behavior under
+Mono/Linux is untested and must not be treated as equivalent to Ctrl+C or a
+confirmed durable checkpoint. A future systemd adapter must wait for the process
+to exit cleanly and still separately test persistence semantics. [S5] [S6]
+
+The docs describe Steam authentication and an optional non-Steam email/password
+login path. Admin global chat commands are configured by account GUID in
+`chat-admins.json`. The non-Steam documentation warns that passwords cannot be
+recovered. Keep all account credentials and admin identities external to GSA
+reports and deployment files. No authentication flow was exercised. [S3] [S15]
+
+== GSA and multi-service boundary
+
+There is no BostonUnlocked A2ML profile or GSA-specific source in this
+qualification. No legacy profile is needed or created. If a future deployment is
+reviewed, it can declare the one Host runtime with three separate TCP port
+records, explicit state/config/log paths, and an opaque selected runtime identity.
+That declaration would describe the Host process; it must not claim that socket
+binding proves readiness or client reachability. GSA can remain an optional
+observer/controller, with the game service fully independent of GSA and
+VeriSimDB.
+
+BostonUnlocked does *not* provide a second example that justifies a generic
+deployment-group/component abstraction: its three listeners live in one process
+and share a single stop and state boundary. The optional Supervisor is an
+independent management service, not a peer game shard. DST's researched Master
+and Caves topology is materially different: separate shard processes share a
+cluster identity, coordinated update boundary, and save/backup boundary. The
+existing DST note therefore remains blocked on choosing a parent/component model,
+and BostonUnlocked adds no matching pressure. Keep both designs explicit; do not
+implement generic group semantics on this evidence alone. [S16]
+
+== Qualification record and next step
+
+[cols="1,3",options="header"]
+|===
+|Question |Finding
+|Build/toolchain |Windows/MSBuild/.NET Framework 4.8 is the documented path; no local toolchain to build.
+|Linux |Plausible only through an unverified compatible runtime such as Mono; net48, Windows service wrapper, build scripts, and native SQLite DLL need a controlled Linux test.
+|Python |Client asset patching and `resources.assets` extraction only; not the gameplay server runtime.
+|Assets |Operator-provided supported client and extracted DLL/static-data/StreamingAssets required; absent here.
+|Topology |One gameplay Host process, three TCP listeners; optional Windows Supervisor is separate.
+|Configured ports |80/TCP HTTP, 5055/TCP APlay, 4530/TCP Photon by defaults; configurable in Host/script. No live bind observed.
+|Client connection |Unknown; no legal local client/assets available for test.
+|Shutdown |Ctrl+C and Windows service stop paths found in source; Linux SIGTERM behavior unknown.
+|Backup/restore |Upstream docs require stop-and-copy; restore not tested. GSA backup remains unsupported.
+|Resource usage |Unknown; server was not built or started.
+|Permanent adoption |Not ready. First obtain the operator-provided client inputs and choose a controlled Windows or Linux test environment; then qualify build, readiness, client login, state restore, and stop behavior.
+|===
+
+After those inputs arrive, first build and run a standalone disposable service
+with loopback/high ports and a fresh state directory. Verify the three endpoints
+separately, then patch a disposable client and complete an actual login/session.
+Only that evidence can justify a read-only GSA collector. No generic topology
+change is currently recommended.
+
+== Sources
+
+* [S1] link:https://github.com/BostonUnlocked/BostonUnlockedServer/tree/9518142003d63edd09f8d55a28e8bbd3dd57b7aa[Server repository at inspected revision] and its link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/README.md[README].
+* [S2] link:https://bostonunlocked.github.io/BostonUnlockedDocs/[Project documentation site].
+* [S3] link:https://bostonunlocked.github.io/BostonUnlockedDocs/features_limitations.html[Features, limitations, and WIP status]; link:https://bostonunlocked.github.io/BostonUnlockedDocs/[June 2026 community-server move announcement].
+* [S4] link:https://bostonunlocked.github.io/BostonUnlockedDocs/installsp.html[Official self-host/patching guide].
+* [S5] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/start_localserver.ps1[PowerShell build/run entrypoint] and link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Host/Program.cs[Host process and listener orchestration].
+* [S6] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Host/Shadowrun.LocalService.Host.csproj[Host net48 project], link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Supervisor/Shadowrun.LocalService.Supervisor.csproj[Windows Supervisor project], and link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/.github/workflows/msbuild.yml[server build workflow].
+* [S7] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/Persistence/SqliteLocalStore.cs[SQLite persistence implementation] and link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Dependencies/sqlite3.dll[the checked-in Windows native SQLite DLL].
+* [S8] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/extractresourcesfrominstallation.ps1[client resource extractor].
+* [S9] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/tools/patch_embedded_configs.py[client endpoint patcher] and link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/clientsetup/LauncherConfig.xml[tracked client configuration with Steam AppID].
+* [S10] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/Http/HttpStubServer.cs[HTTP listener/status/config routing].
+* [S11] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/Protocols/APlayTcpStub.SocketHost.cs[APlay listener] and link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/Protocols/PhotonProxyTcpStub.cs[Photon listener].
+* [S12] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/LocalServiceOptions.cs[data, config, and log path defaults].
+* [S13] link:https://github.com/BostonUnlocked/BostonUnlockedServer/blob/9518142003d63edd09f8d55a28e8bbd3dd57b7aa/server/src/Shadowrun.LocalService.Core/Persistence/SqliteLocalStore.cs[SQLite schema and WAL setup].
+* [S14] link:https://bostonunlocked.github.io/BostonUnlockedDocs/server_data.html[Server data, backup, and restore instructions].
+* [S15] link:https://bostonunlocked.github.io/BostonUnlockedDocs/enable_admin.html[Admin identity configuration] and the non-Steam login section of [S4].
+* [S16] link:BAROTRAUMA-DST-ADAPTER-RECON.adoc[existing DST topology reconnaissance].
