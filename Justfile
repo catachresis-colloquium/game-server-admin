@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# Copyright (c) 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 #
 # RSR Standard Justfile Template
 # https://just.systems/man/en/
@@ -419,10 +420,9 @@ verisimdb-deploy:
 #   build → volumes → firewall → quadlet → start → verify → register in VeriSimDB
 #
 # Usage:
-#   just game-deploy GAME=cryofall           # any supported profile
-#   just cryofall-deploy                      # CryoFall shorthand
-#   just game-deploy GAME=cryofall DRY=1      # preview without executing
-#   just verpex-deploy GAME=cryofall          # SSH deploy to Verpex VPS
+#   just game-deploy GAME=<supported-profile>
+#   just game-deploy GAME=<supported-profile> DRY=1
+#   just verpex-deploy GAME=<supported-profile>
 
 # Existing deployment route — GAME must match an existing legacy profile ID; no new A2ML profiles
 game-deploy GAME="" DRY="0":
@@ -443,26 +443,12 @@ game-deploy GAME="" DRY="0":
 #   WIZARD_TARGET_HOST (optional, for remote Verpex deployment)
 
 # Interactive wizard — prompts for all values
-wizard GAME="cryofall":
+wizard GAME="minecraft-java":
     bash scripts/wizard.sh --game {{ GAME }}
 
 # Unattended wizard — reads all values from environment
-wizard-auto GAME="cryofall":
+wizard-auto GAME="minecraft-java":
     WIZARD_GAME="{{ GAME }}" bash scripts/wizard.sh --game {{ GAME }} --unattended
-
-# Stage game files from Steam onto the deployment host
-# Requires: STEAM_USER, STEAM_PASS
-cryofall-stage:
-    bash scripts/steam-stage.sh \
-        --app-id 1200170 \
-        --target-volume cryofall-game-data
-
-# Stage game files to Verpex VPS (set WIZARD_TARGET_HOST or uses default)
-cryofall-stage-verpex:
-    bash scripts/steam-stage.sh \
-        --app-id 1200170 \
-        --target-volume cryofall-game-data \
-        --target-host root@209.42.26.106
 
 # Resolve a Steam vanity URL to a Steam64 ID
 # Usage: just steam-resolve VANITY=hyperpolymath API_KEY=<your-key>
@@ -478,81 +464,28 @@ steam-resolve VANITY="" API_KEY="":
     fi
     GSA_STEAM_API_KEY="${KEY}" src/interface/ffi/zig-out/bin/gsa steam resolve "${VANITY}"
 
-# CryoFall shorthand — equivalent to: just game-deploy GAME=cryofall
-cryofall-deploy:
-    just game-deploy GAME=cryofall
 
-# Build the CryoFall container image only (no full provision)
-cryofall-build:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Building CryoFall server image..."
-    podman build \
-        -t localhost/cryofall-server:latest \
-        -f container/cryofall/Containerfile \
-        .
-    echo "Built localhost/cryofall-server:latest"
+# Read-only, explicit-instance CryoFall operations. No lifecycle, update, or
+# backup tasks are exposed by this qualification.
+cryofall-test-inspect:
+    src/interface/ffi/zig-out/bin/gsa instance inspect --file deployment-instances/wizardly-hellman/cryofall-test.json --id cryofall-test --host-id wizardly-hellman
 
-# CryoFall service management (via systemd Quadlet)
-cryofall-start:
-    systemctl --user start gsa-cryofall
+cryofall-test-status:
+    src/interface/ffi/zig-out/bin/gsa instance status --file deployment-instances/wizardly-hellman/cryofall-test.json --id cryofall-test --host-id wizardly-hellman
 
-cryofall-stop:
-    systemctl --user stop gsa-cryofall
-
-cryofall-restart:
-    systemctl --user restart gsa-cryofall
-
-cryofall-logs:
-    podman logs --tail 100 -f cryofall
-
-cryofall-status:
-    #!/usr/bin/env bash
-    echo "CryoFall container:"
-    podman inspect --format "  Status: {{{{.State.Status}}}}  Health: {{{{.State.Health.Status}}}}" cryofall 2>/dev/null || echo "  Not running"
-    echo ""
-    echo "Systemd service:"
-    systemctl --user status gsa-cryofall --no-pager 2>/dev/null | head -8 || echo "  Not installed"
-
-# Start self-healing watchdog in the foreground
-cryofall-watchdog:
-    bash scripts/self-heal.sh --container cryofall --port 6000
-
-# Install watchdog as a systemd user service (runs in background on Verpex)
-cryofall-watchdog-install:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    UNIT_FILE="${HOME}/.config/systemd/user/gsa-cryofall-watchdog.service"
-    mkdir -p "$(dirname "${UNIT_FILE}")"
-    REPO="$(pwd)"
-    cat > "${UNIT_FILE}" << UNIT
-    [Unit]
-    Description=GSA CryoFall self-heal watchdog
-    After=gsa-cryofall.service
-    Requires=gsa-cryofall.service
-
-    [Service]
-    Type=simple
-    ExecStart=/usr/bin/bash ${REPO}/scripts/self-heal.sh --container cryofall --port 6000
-    Restart=always
-    RestartSec=10s
-    StandardOutput=journal
-    StandardError=journal
-
-    [Install]
-    WantedBy=default.target
-    UNIT
-    systemctl --user daemon-reload
-    systemctl --user enable --now gsa-cryofall-watchdog
-    echo "Watchdog service installed and started."
-    systemctl --user status gsa-cryofall-watchdog --no-pager | head -6
+cryofall-test-logs LINES="40":
+    src/interface/ffi/zig-out/bin/gsa instance logs --file deployment-instances/wizardly-hellman/cryofall-test.json --id cryofall-test --host-id wizardly-hellman --lines {{ LINES }}
 
 # Deploy to Verpex VPS via SSH (run this from local machine)
 # Requires SSH key access: root@209.42.26.106
-verpex-deploy GAME="cryofall":
+verpex-deploy GAME="minecraft-java":
     #!/usr/bin/env bash
     set -euo pipefail
     GAME="{{ GAME }}"
+    if [ "${GAME}" = "cryofall" ]; then
+        echo "CryoFall profile-ID-based remote provisioning is retired; no remote deployment is performed."
+        exit 2
+    fi
     VERPEX_HOST="209.42.26.106"
     VERPEX_USER="root"
     echo "Deploying ${GAME} server to Verpex VPS (${VERPEX_HOST})..."

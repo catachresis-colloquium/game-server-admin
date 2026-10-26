@@ -39,8 +39,8 @@ environment = {
 }
 volumes = [
   "gsa-data:/data",
-  # Mount the host Podman socket read-write so GSA can manage the cryofall
-  # container via `podman start/stop/exec cryofall`.
+  # This socket is a legacy container-administration capability; no game
+  # server is a dependency of the GSA service stack.
   # On Verpex (AlmaLinux 9.7, rootless): ${XDG_RUNTIME_DIR}/podman/podman.sock
   # Set PODMAN_SOCKET_HOST in the environment before running selur-compose.
   "${PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock",
@@ -49,33 +49,9 @@ restart = "always"
 depends_on = ["gsa-verisimdb"]
 healthcheck = { test = "curl -sf http://localhost:8090/health", interval = "30s", timeout = "5s", retries = 3 }
 
-# CryoFall dedicated server
-# Managed by GSA via the Podman socket — do not start/stop this directly.
-# Use: GSA Gossamer GUI → CryoFall → Actions
-# Or:  gsa probe 209.42.26.106 6000   to fingerprint the live server
-#
-# Ports are bound to 0.0.0.0 (all interfaces) because Cloudflare cannot
-# proxy UDP.  DNS record cryofall.jewell.nexus must be grey-cloud (DNS-only).
-[services.cryofall]
-image = "localhost/cryofall-server:latest"
-ports = [
-  "0.0.0.0:6000:6000/udp",
-  "0.0.0.0:6001:6001/udp",
-]
-environment = {
-  CRYOFALL_INSTALL_DIR = "/opt/cryofall",
-  CRYOFALL_DATA_DIR    = "/data/cryofall",
-  CRYOFALL_BACKUP_DIR  = "/data/backups",
-  CRYOFALL_APPID       = "1200170",
-}
-volumes = [
-  "cryofall-game-data:/opt/cryofall",
-  "cryofall-world-data:/data/cryofall",
-  "cryofall-backups:/data/backups",
-]
-restart = "on-failure"
-# No healthcheck via HTTP — CryoFall is UDP-only.
-# The Quadlet unit (gsa-cryofall.container) uses `ss` to verify port 6000 is bound.
+# CryoFall is deliberately absent from this GSA/VeriSimDB stack. Its game
+# runtime is an independent systemd service described by a deployment
+# instance; a control-plane failure cannot gate game startup.
 
 # Svalinn edge gateway: validates requests, enforces policies, TLS termination
 [services.svalinn]
@@ -99,19 +75,6 @@ healthcheck = { test = "curl -sf http://localhost:80/health", interval = "30s", 
 driver = "local"
 
 [volumes.svalinn-config]
-driver = "local"
-
-# CryoFall server volumes
-# cryofall-game-data   ~3 GB SteamCMD game installation (persists across updates)
-# cryofall-world-data  Settings.xml + world saves (GSA config editor owns this)
-# cryofall-backups     Timestamped world archives (GSA `backup` action)
-[volumes.cryofall-game-data]
-driver = "local"
-
-[volumes.cryofall-world-data]
-driver = "local"
-
-[volumes.cryofall-backups]
 driver = "local"
 
 # ============================================================================

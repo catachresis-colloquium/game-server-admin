@@ -1,6 +1,7 @@
 <!--
   SPDX-License-Identifier: AGPL-3.0-or-later
   Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+  SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 
   nexus-setup/panel.html — Nexus Setup wizard for Game Server Admin
 
@@ -593,8 +594,8 @@
       </div>
 
       <div class="ns-alert info" id="ns-profile-hint">
-        Select a profile above to continue. CryoFall requires authenticated
-        Steam credentials (step 5) — other profiles may not need them.
+        Select a supported profile above to continue. Legacy CryoFall onboarding
+        is retired; its dedicated server uses anonymous SteamCMD downloads.
       </div>
     </div>
 
@@ -841,7 +842,7 @@
           <label for="ns-steam-user">Steam Username</label>
           <input type="text" id="ns-steam-user" placeholder="hyperpolymath"
                  autocomplete="username" />
-          <div class="ns-hint">The Steam account that owns the game (must own AppID 1200170).</div>
+          <div class="ns-hint">Legacy CryoFall AppID 1200170 was unrelated. The verified server Tool is AppID 1061710 and supports anonymous downloads.</div>
         </div>
 
         <div class="ns-field">
@@ -1104,7 +1105,6 @@
       // Fallback: known profiles when FFI not wired yet
       if (profiles.length === 0) {
         profiles = [
-          { id: 'cryofall',   name: 'CryoFall',            game_port: 6000, discovery_port: 6001,  description: 'AtomicTorch Automaton engine' },
           { id: 'valheim',    name: 'Valheim',              game_port: 2456, discovery_port: 2457,  description: 'Viking survival game' },
           { id: 'minecraft',  name: 'Minecraft Java',       game_port: 25565, discovery_port: 25565, description: 'Mojang sandbox game' },
           { id: 'terraria',   name: 'TModLoader/Terraria',  game_port: 7777, discovery_port: 7777,  description: '2D sandbox adventure' },
@@ -1113,15 +1113,27 @@
       }
 
       profiles.forEach(function(profile) {
+        var retired = profile.id === 'cryofall';
         var card = document.createElement('div');
         card.className = 'ns-profile-card' +
-          (nsState.selectedProfileId === profile.id ? ' selected' : '');
+          (nsState.selectedProfileId === profile.id ? ' selected' : '') +
+          (retired ? ' disabled' : '');
+        card.setAttribute('aria-disabled', retired ? 'true' : 'false');
         card.setAttribute('data-id', profile.id);
         card.innerHTML =
           '<div class="ns-profile-card-name">' + nsEscapeHtml(profile.name) + '</div>' +
           '<div class="ns-profile-card-id">' + nsEscapeHtml(profile.id) + '</div>' +
-          '<div class="ns-profile-card-port">UDP ' + nsEscapeHtml(String(profile.game_port)) + '</div>';
-        card.onclick = function() { nsSelectProfile(profile); };
+          '<div class="ns-profile-card-port">UDP ' + nsEscapeHtml(String(profile.game_port)) + '</div>' +
+          (retired ? '<div class="ns-profile-card-port">Legacy profile; read-only qualification only</div>' : '');
+        card.onclick = function() {
+          if (retired) {
+            var hint = document.getElementById('ns-profile-hint');
+            hint.className = 'ns-alert info';
+            hint.textContent = 'CryoFall provisioning and config editing are retired here. Use an explicitly declared instance for read-only inspection.';
+            return;
+          }
+          nsSelectProfile(profile);
+        };
         grid.appendChild(card);
       });
 
@@ -1139,6 +1151,7 @@
    * @param {object} profile - Profile object with id, name, game_port, etc.
    */
   function nsSelectProfile(profile) {
+    if (profile.id === 'cryofall') return;
     nsState.selectedProfileId = profile.id;
     nsState.selectedProfileData = profile;
 

@@ -1,0 +1,231 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= CryoFall Dedicated Server Qualification and Reconciliation
+:revdate: 2026-10-26
+:status: disposable qualification complete; permanent deployment not approved
+
+== Upstream distribution verified
+
+AtomicTorch's link:https://wiki.atomictorch.com/CryoFall/Server/Setup[server
+setup guide] documents .NET Runtime 6.0, anonymous SteamCMD installation with
+AppID `1061710`, the `Binaries/Server` launch directory, and these commands:
+
+[source,shell]
+----
+steamcmd +force_install_dir /opt/cryofall-test +login anonymous +app_update 1061710 +quit
+cd /opt/cryofall-test/Binaries/Server
+dotnet CryoFall_Server.dll loadOrNew   # first world only
+dotnet CryoFall_Server.dll load        # later starts
+----
+
+SteamCMD public app metadata confirmed `1061710` as *CryoFall Dedicated
+Server*, a free-to-download Tool with Linux and Windows depots. Its public
+build at qualification time was `9211472`, depot `1061711`; the root file
+`Version 1.33.1.15` contained `1.33.1.15 (Server, NetCore)`. AppID `1200170` is not a
+CryoFall package: SteamCMD identifies it as World of Warships — Black Alaska
+Pack, DLC for AppID `552990`. No evidence found that it ever represented a
+CryoFall server or DLC.
+
+The downloaded tree contains `Core/Core.cpk`, `Binaries/Server/` with
+`CryoFall_Server.dll` and its `.runtimeconfig.json`, and `Binaries/Shared/Compiler/`.
+The runtime config targets `net6.0`. It is a .NET server, not a native
+`CryoFall_Server.x86_64`/Mono executable. The tested commands used Microsoft
+.NET Runtime `6.0.36`, installed locally under `/opt/gsa-dotnet-6`; no system
+package installation was needed.
+
+== Disposable runtime evidence
+
+The server ran as non-root user `joshua` from the isolated installation
+`/opt/gsa-cryofall-qualification`. It was never installed over a preserved
+deployment, no public firewall rule was changed, and no Steam username or
+password was used. The first run used `loadOrNew`; it created
+`Data/SettingsServer.xml`, `Data/ModsConfig.xml`, `Data/ServerRates.config`,
+and `Data/Saves/Save0.save`.
+
+Effective paths are:
+
+* config: `Data/SettingsServer.xml`;
+* rates: `Data/ServerRates.config`;
+* save/world: `Data/Saves/`;
+* logs: `Data/Logs/`, with chat in `Data/ChatLogs/`;
+* installation version: root file named `Version <version>`.
+
+Updates use anonymous SteamCMD `app_update 1061710`. AtomicTorch's guidance is
+to stop the server, back up the complete `Data/` directory, overwrite both
+`Binaries/` and `Core/`, and then start it again. No GSA update action is
+enabled.
+
+The only configured game port was UDP 6000. During the run, the selected
+systemd MainPID owned UDP listeners on 6000, 6100, and 61000. Server logs
+identify 6100 and 61000 as LAN discovery listeners. No UDP 6001 listener was
+observed. The server also made an outbound TCP connection to the AtomicTorch
+master endpoint; no TCP listening socket was found. Port 61000 is included
+because it was observed in this build, not inferred from a legacy profile.
+
+The strongest tested startup signal is the per-run log marker `Server world
+activated`, paired with a UDP 6000 listener attributed to the selected MainPID.
+The GSA adapter reports process-active, configured port, PID-attributed socket,
+and game-ready evidence separately. It does not treat a configured port as a
+listening port. No independent query/status protocol or client connection was
+qualified; the ready result means the world activation marker and game socket
+were both observed, not that an external client can reach it.
+
+== Shutdown and backup consistency
+
+AtomicTorch documents `stop 0` for immediate save and exit and `stop 60 <text>`
+for a delayed save-and-stop. In the disposable run, `stop 0` produced an
+acknowledgement, logged `Saving the world on server stop`, wrote
+`Data/Saves/Save0.save`, and ended with `Application quit: success`. A regular
+systemd SIGTERM exited with status 143 and did not log a checkpoint; the save
+file's pre-test SHA-256 was unchanged. Therefore SIGTERM is not an
+application-consistent shutdown mechanism for this build.
+
+A private FIFO worked as the service console input. The host-specific
+link:../../deployment-instances/wizardly-hellman/cryofall-test.service[qualification
+unit] writes `stop 0` in `ExecStop`, then waits for the selected unit's MainPID
+to exit before systemd sends its default termination signal. Its stop timeout
+is unlimited so systemd does not turn a slow save into SIGTERM. The disposable
+unit runs as the operator account, has no enablement target, and is not
+enabled. A permanent service needs an operator-owned non-root account, runtime
+installation, and path-specific unit before adoption.
+
+Backup mode is *clean-stop-required*. After a successful console stop, the
+entire `Data/` directory was archived with mode `0600`; the archive was
+verified and restored into a separate installation. The restored process
+loaded the same save, activated the world, bound UDP 6000 and then cleanly
+saved again through `stop 0`. The archive was about 3 MiB for the fresh world.
+No live tar action, hot backup, retention system, or backup execution is
+enabled in GSA. The deployment-instance document has no fabricated backup
+policy reference and disables backup capability.
+
+== Resource observations
+
+The host had 3.6 GiB RAM and 4 GiB swap. With the production Minecraft server
+running, CryoFall's first world generation peaked near 1.30 GB cgroup memory
+(about 1.21 GiB) under a 1.6 GiB transient limit and used about one CPU for
+roughly 73 seconds on the one-core allocation. Available RAM fell to around
+0.7 GiB during generation; swap use increased by about 60 MiB. Later loads
+peaked around 1.35 GB. This is materially heavier than the old Quadlet's
+claimed 1.5 GiB for ten players. AtomicTorch's guide lists 1.5 GB for up to
+about 30 players and recommends a second CPU for snapshot saving; this host
+is suitable only for controlled qualification, not a permanent public server
+without further capacity review.
+
+== Existing GSA assumption audit
+
+|===
+|Assumption |Classification |Reconciliation
+
+|Steam AppID `1200170`
+|STALE
+|It is a World of Warships DLC. Use `1061710` for the dedicated server.
+
+|`CryoFall_Server.x86_64` and Mono/native launch
+|STALE
+|Current Linux package is `CryoFall_Server.dll` on .NET 6.
+
+|UDP 6000
+|VERIFIED CURRENT
+|Default game port in upstream documentation and the tested config/listener.
+
+|UDP 6001 as status/discovery
+|STALE
+|No 6001 listener. This build logged LAN discovery on UDP 6100 and 61000.
+
+|Authenticated Steam login / game ownership
+|STALE
+|Anonymous download of the dedicated-server Tool succeeded.
+
+|`Settings.xml` and `/data/cryofall/Settings.xml`
+|STALE
+|The server creates `Data/SettingsServer.xml` with lower-case field names.
+
+|`/data/cryofall/Saves`
+|HISTORICAL BUT COMPATIBLE
+|The old custom mount could contain save files, but the actual default is
+`<install>/Data/Saves` and no layout mapping was verified.
+
+|Live tar of `Saves`
+|UNSUPPORTED
+|No application checkpoint occurs before that archive operation.
+
+|SIGTERM as a save-capable stop
+|UNSUPPORTED
+|Tested SIGTERM exited 143 without the save acknowledgement/checkpoint.
+
+|UDP 6000 bound means healthy
+|UNSUPPORTED
+|A bound socket is transport evidence only. Readiness also requires the
+current-run world activation log marker.
+
+|Quadlet `Requires=gsa-verisimdb.service`
+|UNSUPPORTED
+|A game service must have no GSA or VeriSimDB startup dependency.
+
+|===
+
+The old `container/cryofall` image/Quadlet, volume layout, XML template,
+live-backup script and profile-ID-based provisioning route are retired. The
+legacy A2ML profile remains readable compatibility data, with only factual
+AppID, executable, port and config path corrections. It is not the identity
+source for a deployment and its old actions are not an approved control path.
+The GUI Nexus Setup path and old watchdog were likewise not used; the stale
+CryoFall provisioning/configuration selection is disabled or rejected.
+
+== GSA integration boundary
+
+The operator-owned
+link:../../deployment-instances/wizardly-hellman/cryofall-test.json[`cryofall-test`]
+document explicitly selects profile `cryofall`, host key `wizardly-hellman`,
+and systemd unit `cryofall-test.service`. It declares UDP 6000/6100/61000 and
+the verified install/config/save paths. Resource maximum records the
+qualification cap; minimum and backup policy remain unknown. Lifecycle and
+backup capabilities are disabled.
+
+The internal read-only collector loads this document through the ordinary
+explicit-ID deployment loader. It queries only bounded systemd state, reads
+the selected MainPID's `/proc` identity/cwd/argv/start time, rechecks PID and
+InvocationID, reads only the `<port>` config value, the version file, the
+selected process's UDP sockets and bounded/redacted server logs. It never
+serializes `SettingsServer.xml`, reads the environment, or executes lifecycle
+commands. Configured port, MainPID-attributed socket binding, current-run world
+activation, derived game readiness, and external client reachability are
+separate fields. Client/query reachability remains unknown and is explicitly
+reported as untested.
+
+During the production-loader qualification at 2026-10-26 01:10 UTC, GSA
+selected only `cryofall-test` and reported service MainPID `66101`, invocation
+ID `0c7c097a654844c887dd6b43dd167e28`, game version `1.33.1.15`, configured
+UDP 6000, and PID-attributed UDP listeners 6000, 6100 and 61000. The report
+marked readiness true only after the current log's world-activation marker
+and the MainPID-owned UDP 6000 socket were both observed. The unit used
+1,318,465,536 bytes and 18.61 CPU seconds at inspection, and peaked at 1.3 GiB;
+the controlled run ended with
+systemd result `success`, exit status 0, a completed save, and
+`Application quit: success`. Safe GSA log retrieval returned bounded log
+lines without config contents or environment variables.
+
+GSA and VeriSimDB are not runtime prerequisites. No production CryoFall
+installation was replaced, no game service was added to the Compose stack, no
+firewall was opened, and no GSA lifecycle/backup command was enabled. The
+disposable `cryofall-test` service is left stopped and not enabled at boot.
+The implementation is *not ready for permanent adoption* until a dedicated
+service account/runtime path is provisioned, remote client reachability and
+an admin path are tested, and resource capacity is approved.
+
+== Reproduction and evidence boundary
+
+The public install procedure used was:
+
+[source,shell]
+----
+steamcmd +force_install_dir /tmp/cryofall-disposable +login anonymous +app_update 1061710 +quit
+----
+
+SteamCMD completed build `9211472`; its first attempt reported a transient
+`Missing configuration` state, then the resumed install completed and SteamCMD
+reported the app already up to date. The captured disposable test used
+`/opt/gsa-cryofall-qualification`, local .NET 6.0.36, a 1.6 GiB/100% CPU cap,
+`loadOrNew`, `load`, systemd unit observations, `ss -lunp`, `stop 0`, SIGTERM,
+and a separate archive/restore installation. No client connection or public
+networking test was performed.

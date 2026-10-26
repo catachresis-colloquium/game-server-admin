@@ -1,0 +1,5 @@
+<server-settings>
+  <port>6000</port>
+  <is_public_server>0</is_public_server>
+  <server_password>fixture-secret-must-not-be-projected</server_password>
+</server-settings>

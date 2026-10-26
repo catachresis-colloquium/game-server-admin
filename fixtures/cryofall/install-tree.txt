@@ -1,0 +1,10 @@
+Version 1.33.1.15 (Server, NetCore)
+Version 1.33.1.15
+Binaries/Server/CryoFall_Server.dll
+Binaries/Server/CryoFall_Server.runtimeconfig.json: tfm net6.0
+Binaries/Shared/Compiler/CryoFall_Compiler.dll
+Core/Core.cpk
+Data/SettingsServer.xml
+Data/ModsConfig.xml
+Data/ServerRates.config
+Data/Saves/Save0.save

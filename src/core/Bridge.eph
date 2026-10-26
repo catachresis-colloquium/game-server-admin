@@ -1,5 +1,6 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
 -- Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+-- SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 --
 -- Bridge.eph — IPC command handlers for Game Server Admin
 --
@@ -569,7 +570,9 @@ fn handleNexusStageFiles(payload: String, caps: &GsaCapSet) -> String =
   let steam_user  = jsonField(payload, "steam_user") in
   let steam_pass  = jsonField(payload, "steam_pass") in
   let target_host = jsonField(payload, "target_host") in
-  if profile_id == "" || steam_user == "" || steam_pass == "" then
+  if profile_id == "cryofall" then
+    jsonError("CryoFall staging through the legacy GUI is retired; the current server downloads anonymously and uses an explicit instance")
+  else if profile_id == "" || steam_user == "" || steam_pass == "" then
     jsonError("Missing required field (profile_id, steam_user, steam_pass)")
   else {
     let env_json = "{\"STEAM_USER\":\"" ++ steam_user ++
@@ -595,7 +598,9 @@ fn handleNexusProvision(payload: String, caps: &GsaCapSet) -> String =
   let ssh_user    = jsonField(payload, "ssh_user") in
   let config_json = jsonField(payload, "server_config") in
   let ops_json    = jsonField(payload, "operators") in
-  if profile_id == "" then
+  if profile_id == "cryofall" then
+    jsonError("CryoFall profile-based provisioning and config writes are retired; use the read-only explicit-instance path")
+  else if profile_id == "" then
     jsonError("Missing 'profile_id'")
   else {
     -- Write config to a temp Settings.xml from the form values
@@ -628,7 +633,9 @@ fn handleNexusVerify(payload: String, caps: &GsaCapSet) -> String =
   let profile_id  = jsonField(payload, "profile_id") in
   let target_host = jsonField(payload, "target_host") in
   let game_port   = jsonField(payload, "game_port") in
-  if target_host == "" then
+  if profile_id == "cryofall" then
+    jsonError("CryoFall legacy profile/host verification is retired; select an explicit deployment instance")
+  else if target_host == "" then
     jsonError("Missing 'target_host'")
   else {
     -- Probe the live server

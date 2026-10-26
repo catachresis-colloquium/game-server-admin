@@ -1,157 +1,48 @@
 # SPDX-License-Identifier: MPL-2.0
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath)
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 #
-# Game Server Admin — CryoFall game profile
-# CryoFall is a multiplayer survival game by AtomicTorch Studio.
-# Uses a custom .NET engine (Automaton) — not Steam Query protocol.
-# Dedicated server config is XML-based, installed via SteamCMD.
+# Legacy CryoFall compatibility profile. Deployment identity and runtime
+# operations belong to the separately versioned deployment-instance model.
+# No lifecycle, update, config-write, or backup action is exposed here.
 
 @game-profile(id="cryofall", name="CryoFall", engine="Automaton"):
 
   @ports:
     @port(name="game", number=6000, protocol="UDP"):
-      Primary game traffic port. All client connections use this port.
-      Must be accessible through the firewall and DNS-only (no Cloudflare
-      proxy — UDP is not proxied).
+      Default game traffic port; verified in upstream documentation and the
+      disposable 1.33.1.15 listener inspection.
     @end
-    @port(name="status", number=6001, protocol="UDP"):
-      Server status and discovery port. Used by the in-game server browser.
+    @port(name="lan-discovery", number=6100, protocol="UDP"):
+      Observed LAN discovery listener for the tested current Linux build.
+    @end
+    @port(name="lan-discovery-secondary", number=61000, protocol="UDP"):
+      Also observed for LAN discovery in the tested current Linux build.
     @end
   @end
 
   @protocol(type="custom", variant="automaton"):
-    AtomicTorch Automaton engine protocol over UDP.
-    Not compatible with Steam/Valve Query (A2S).
-    Server is found via direct IP:port or in-game server browser.
+    AtomicTorch Automaton protocol over UDP; not Steam/Valve A2S query.
+    No standalone status/query protocol was verified in this qualification.
   @end
 
   @fingerprint:
-    @steam-appid(server=1200170, client=829590) @end
-    @executable(name="CryoFall_Server.x86_64") @end
+    @steam-appid(server=1061710, client=829590) @end
+    @executable(name="CryoFall_Server.dll") @end
     @platform(os="linux", arch="x86_64") @end
   @end
 
-  @config(format="xml", path="/data/cryofall/Settings.xml"):
-    # XML configuration for CryoFall dedicated server.
-    # Located in the server's Data/ directory. All fields map to
-    # child elements of the root <server-settings> element.
-
-    @field(key="ServerName", type="string", label="Server Name"):
-      Display name shown in the in-game server browser.
-      @default("My CryoFall Server") @end
-    @end
-
-    @field(key="ServerDescription", type="string", label="Server Description"):
-      Short description shown in the server browser listing.
-      @default("A CryoFall dedicated server") @end
-    @end
-
-    @field(key="ServerPort", type="int", label="Server Port"):
-      UDP port the server listens on. Default 6000. Must match firewall rule.
-      @constraint(min=1024, max=65535) @end
-      @default(6000) @end
-    @end
-
-    @field(key="MaxPlayers", type="int", label="Max Players"):
-      Maximum concurrent player connections. Keep low on constrained VPS.
-      @constraint(min=1, max=200) @end
-      @default(16) @end
-    @end
-
-    @field(key="IsPrivate", type="bool", label="Private Server"):
-      If true, the server is hidden from the public server browser.
-      @default(false) @end
-    @end
-
-    @field(key="ServerPassword", type="secret", label="Server Password"):
-      Password players must enter to connect. Leave empty for open access.
-    @end
-
-    @field(key="WipePeriodDays", type="int", label="Wipe Period (days)"):
-      How often the server world resets. 0 disables automatic wipe.
-      @constraint(min=0, max=365) @end
-      @default(0) @end
-    @end
-
-    @field(key="IsPvE", type="bool", label="PvE Mode", category="gameplay"):
-      If true, players cannot damage each other.
-      @default(true) @end
-    @end
-
-    @field(key="IsRaidsEnabled", type="bool", label="Raids Enabled", category="gameplay"):
-      Allow raiding other players' bases (only meaningful in PvP mode).
-      @default(false) @end
-    @end
-
-    @field(key="WelcomeMessage", type="string", label="Welcome Message"):
-      Message displayed to players when they connect.
-      @default("Welcome!") @end
-    @end
-
-    @field(key="ServerRates_GatheringSpeedMultiplier", type="float", label="Gathering Speed", category="gameplay"):
-      Multiplier for resource gathering speed. Higher = faster progression.
-      @constraint(min=0.1, max=10.0) @end
-      @default(1.0) @end
-    @end
-
-    @field(key="ServerRates_LearningSpeedMultiplier", type="float", label="Learning Speed", category="gameplay"):
-      Multiplier for technology learning speed.
-      @constraint(min=0.1, max=10.0) @end
-      @default(1.0) @end
-    @end
-
-    @field(key="ServerRates_CraftingSpeedMultiplier", type="float", label="Crafting Speed", category="gameplay"):
-      Multiplier for crafting speed.
-      @constraint(min=0.1, max=10.0) @end
-      @default(1.0) @end
-    @end
-
-    @field(key="Operators", type="string", label="Operator Steam IDs", category="admin"):
-      Comma-separated list of Steam64 IDs granted operator (admin) access.
-      These players can use /op, /kick, /ban in-game and have unrestricted build rights.
-      Set via Operators/Operator elements in Settings.xml.
-      Jonathan D.A. Jewell and Joshua Jewell are the designated operators for this server.
-      @default("") @end
-    @end
-  @end
-
-  @actions:
-    @action(id="start", label="Start Server"):
-      podman start cryofall
-    @end
-    @action(id="stop", label="Stop Server"):
-      podman stop -t 30 cryofall
-    @end
-    @action(id="restart", label="Restart Server"):
-      podman restart -t 30 cryofall
-    @end
-    @action(id="update", label="Update Server"):
-      podman exec cryofall steamcmd +force_install_dir /opt/cryofall +login anonymous +app_update 1200170 validate +quit
-    @end
-    @action(id="backup", label="Backup World"):
-      podman exec cryofall tar -czf /data/backups/cryofall-$(date +%Y%m%d-%H%M%S).tar.gz /data/cryofall/Saves
-    @end
-    @action(id="logs", label="View Logs"):
-      podman logs --tail 100 cryofall
-    @end
-  @end
-
-  @container(runtime="podman", name="cryofall"):
-    @image(base="cgr.dev/chainguard/wolfi-base:latest") @end
-    @volumes:
-      @volume(host="/data/cryofall", container="/data/cryofall") @end
-      @volume(host="/opt/cryofall", container="/opt/cryofall") @end
-    @end
-    @publish(port="6000/udp") @end
-    @publish(port="6001/udp") @end
+  @config(format="xml", path="<installation>/Data/SettingsServer.xml"):
+    Current server configuration is generated by the game and uses lower-case
+    XML element names. The old GSA Settings.xml schema does not match it; config
+    write support is intentionally unavailable pending a game-specific parser.
   @end
 
   @clade(inherits="gsa-game", kind="game-profile"):
-    CryoFall dedicated server profile for Game Server Admin.
-    AtomicTorch Automaton engine (not Steam Query compatible).
-    XML-based configuration, Podman container lifecycle, SteamCMD install.
-    Runs on Verpex VPS (AlmaLinux 9.7, Podman 5.6.0).
-    DNS: grey-cloud only — UDP port 6000 cannot be Cloudflare-proxied.
+    Legacy game-description compatibility only. Current Linux dedicated-server
+    distribution is Steam Tool AppID 1061710 and runs the .NET 6 server DLL.
+    Do not use the former Podman, profile-derived identity, update, or backup
+    declarations; the independent runtime and explicit instance are separate.
   @end
 
 @end

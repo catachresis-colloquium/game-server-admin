@@ -22,6 +22,7 @@ const steam_client = @import("steam_client.zig");
 const deployment_registry = @import("deployment_registry.zig");
 const deployment_loader = @import("deployment_instance_loader.zig");
 const minecraft_live = @import("minecraft_live_collector.zig");
+const cryofall_live = @import("cryofall_live_collector.zig");
 
 /// Check if a file exists (Zig 0.15.2 compat — no std.fs.exists).
 fn fileExists(path: []const u8) bool {
@@ -200,7 +201,65 @@ fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File)
         std.process.exit(1);
     };
     defer snapshot.deinit();
-    if (is_inspection) {
+    const target = snapshot.lookup(id.?) catch {
+        err.writeAll("The explicit deployment instance ID was not found.\n") catch {};
+        std.process.exit(1);
+    };
+    if (std.mem.eql(u8, target.profile_id, "cryofall")) {
+        var report = cryofall_live.collect(a, &snapshot, id.?, host.?, if (std.mem.eql(u8, action, "logs")) lines else null) catch |failure| {
+            var message: [256]u8 = undefined;
+            const text = std.fmt.bufPrint(&message, "Read-only CryoFall inspection failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Read-only inspection failed.\n";
+            err.writeAll(text) catch {};
+            std.process.exit(1);
+        };
+        defer report.deinit();
+        if (std.mem.eql(u8, action, "logs")) {
+            if (report.logs) |safe_logs| out.writeAll(safe_logs) catch {};
+            out.writeAll("\n") catch {};
+        } else {
+            const safe_output = .{
+                .instance_id = report.instance_id,
+                .profile_id = report.profile_id,
+                .host = report.host,
+                .unit = report.unit,
+                .load_state = report.load_state,
+                .active_state = report.active_state,
+                .main_pid = report.main_pid,
+                .invocation_id = report.invocation_id,
+                .working_directory = report.working_directory,
+                .executable = report.executable,
+                .command = report.command,
+                .process_start_ticks = report.process_start_ticks,
+                .uptime_seconds = report.uptime_seconds,
+                .boot_id = report.boot_id,
+                .sampled_at_unix_seconds = report.sampled_at_unix_seconds,
+                .configured_game_port = report.configured_game_port,
+                .game_socket_bound = report.game_socket_bound,
+                .observed_sockets = report.observed_sockets,
+                .world_activated = report.world_activated,
+                .ready = report.ready,
+                .readiness_evidence = report.readiness_evidence,
+                .client_reachable = report.client_reachable,
+                .client_reachability_evidence = report.client_reachability_evidence,
+                .game_version = report.game_version,
+                .game_version_source = report.game_version_source,
+                .data_path = report.data_path,
+                .config_path = report.config_path,
+                .save_path = report.save_path,
+                .paths_source = report.paths_source,
+                .configured_port_source = report.configured_port_source,
+                .backup_mode = report.backup_mode,
+                .backup_evidence = report.backup_evidence,
+            };
+            const json = std.json.Stringify.valueAlloc(a, safe_output, .{ .whitespace = .indent_2 }) catch {
+                err.writeAll("Inspection serialization failed.\n") catch {};
+                std.process.exit(1);
+            };
+            defer a.free(json);
+            out.writeAll(json) catch {};
+            out.writeAll("\n") catch {};
+        }
+    } else if (is_inspection) {
         var report = minecraft_live.collect(a, &snapshot, id.?, host.?) catch |failure| {
             var message: [256]u8 = undefined;
             const text = std.fmt.bufPrint(&message, "Read-only inspection failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Read-only inspection failed.\n";

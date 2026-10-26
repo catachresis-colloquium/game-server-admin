@@ -143,13 +143,16 @@ test "directory registry loads multiple declared instances and profile-only look
 test "host registry contains two explicit Minecraft deployments without conflating them" {
     var r = registry.Registry.init(std.testing.allocator);
     defer r.deinit();
-    try std.testing.expectEqual(@as(usize, 2), try loadDirectory(std.testing.allocator, &r, "deployment-instances/wizardly-hellman"));
+    try std.testing.expectEqual(@as(usize, 3), try loadDirectory(std.testing.allocator, &r, "deployment-instances/wizardly-hellman"));
     var view = try r.snapshot(std.testing.allocator);
     defer view.deinit();
     const survival = try view.lookup("minecraft-survival");
     const test_server = try view.lookup("minecraft-test");
+    const cryofall = try view.lookup("cryofall-test");
     try std.testing.expectEqualStrings(survival.profile_id, test_server.profile_id);
     try std.testing.expectEqualStrings("minecraft-java", survival.profile_id);
+    try std.testing.expectEqualStrings("cryofall", cryofall.profile_id);
+    try std.testing.expectEqualStrings("cryofall-test.service", cryofall.runtime.identity);
     try std.testing.expect(!std.mem.eql(u8, survival.runtime.identity, test_server.runtime.identity));
     try std.testing.expect(!std.mem.eql(u8, survival.paths.data[0], test_server.paths.data[0]));
     try std.testing.expect(!std.mem.eql(u8, survival.paths.world[0], test_server.paths.world[0]));

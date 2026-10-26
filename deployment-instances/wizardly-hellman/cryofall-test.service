@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+# Disposable qualification unit; not enabled and not a permanent deployment.
+[Unit]
+Description=Disposable CryoFall qualification instance
+After=network.target
+
+[Service]
+Type=simple
+User=joshua
+Group=joshua
+WorkingDirectory=/opt/gsa-cryofall-qualification/Binaries/Server
+Environment=DOTNET_ROOT=/opt/gsa-dotnet-6
+RuntimeDirectory=cryofall-test
+RuntimeDirectoryMode=0700
+ExecStartPre=/usr/bin/mkfifo -m 0600 /run/cryofall-test/console.fifo
+ExecStart=/usr/bin/bash -c 'exec 3<>/run/cryofall-test/console.fifo; exec /opt/gsa-dotnet-6/dotnet CryoFall_Server.dll load <&3'
+ExecStop=+/usr/bin/bash -c 'pid=$(/usr/bin/systemctl show --property=MainPID --value cryofall-test.service); test "$pid" -gt 0; echo stop 0 > /run/cryofall-test/console.fifo; while [ "$(/usr/bin/systemctl show --property=MainPID --value cryofall-test.service)" = "$pid" ]; do /usr/bin/sleep 1; done'
+TimeoutStopSec=infinity
+Restart=no
+MemoryMax=1536M
+CPUQuota=100%
+NoNewPrivileges=yes
+UMask=0077
+StandardOutput=journal
+StandardError=journal
