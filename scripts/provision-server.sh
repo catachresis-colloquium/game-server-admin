@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 #
 # GSA Server Provisioner — schema-driven game server minter
 #
@@ -20,14 +21,13 @@
 #
 # Usage:
 #   ./scripts/provision-server.sh <game-profile-id>
-#   ./scripts/provision-server.sh cryofall
+#   CryoFall is excluded; it requires the instance-aware disposable flow.
 #
 # Run via Justfile:
-#   just game-deploy GAME=cryofall
-#   just cryofall-deploy
+#   just game-deploy GAME=<supported-profile>
 #
 # Remote (Verpex VPS):
-#   just verpex-deploy GAME=cryofall
+#   just verpex-deploy GAME=<supported-profile>
 #
 # Environment variables (override defaults):
 #   GSA_VERISIMDB_URL     VeriSimDB HTTP endpoint (default: http://[::1]:8090)
@@ -56,6 +56,11 @@ if [ -z "${PROFILE_ID}" ]; then
     exit 1
 fi
 
+if [ "${PROFILE_ID}" = "cryofall" ]; then
+    log_error "CryoFall's profile-ID-based provisioner is retired. Use an explicit deployment instance after disposable qualification."
+    exit 2
+fi
+
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DRY_RUN="${PROVISION_DRY_RUN:-0}"
 SKIP_BUILD="${PROVISION_SKIP_BUILD:-0}"
@@ -78,14 +83,6 @@ QUADLET_DIR="${GSA_QUADLET_DIR:-${HOME}/.config/containers/systemd}"
 
 declare -A PROFILE_PORTS_UDP PROFILE_PORTS_TCP PROFILE_CONTAINER \
            PROFILE_QUADLET PROFILE_VOLUMES PROFILE_STEAMAPPID
-
-# ── CryoFall (AtomicTorch Automaton engine) ───────────────────────────────────
-PROFILE_PORTS_UDP[cryofall]="6000 6001"
-PROFILE_PORTS_TCP[cryofall]=""
-PROFILE_CONTAINER[cryofall]="cryofall"
-PROFILE_QUADLET[cryofall]="container/cryofall/gsa-cryofall.container"
-PROFILE_VOLUMES[cryofall]="cryofall-game-data:/opt/cryofall cryofall-world-data:/data/cryofall cryofall-backups:/data/backups"
-PROFILE_STEAMAPPID[cryofall]="1200170"
 
 # ── Valheim (Iron Gate / Unity) ───────────────────────────────────────────────
 PROFILE_PORTS_UDP[valheim]="2456 2457 2458"
@@ -356,17 +353,16 @@ done
 
 echo ""
 echo -e "  ${BOLD}Manage via GSA${RESET}"
-echo "    GSA GUI → CryoFall → Actions (start / stop / restart / update / backup)"
-echo "    gsa probe localhost ${PORTS_UDP%% *}   ← fingerprint the live server"
+echo "    Select an explicit deployment instance for instance-aware operations."
+echo "    gsa probe localhost ${PORTS_UDP%% *}   ← probe the configured endpoint"
 echo ""
 echo -e "  ${BOLD}Podman / systemd${RESET}"
 echo "    podman ps                                ← check container status"
 echo "    podman logs -f ${CONTAINER}              ← stream server output"
 echo "    systemctl --user status gsa-${CONTAINER} ← service health"
 echo ""
-echo -e "  ${BOLD}Admin (CryoFall)${RESET}"
-echo "    Edit container/${CONTAINER}/Settings.xml → add Steam IDs to <Operators>"
-echo "    Or in-game: /op <character-name>"
+echo -e "  ${BOLD}Game administration${RESET}"
+echo "    Use the game's supported admin interface; no generic admin path is assumed."
 echo ""
 echo -e "  ${BOLD}DNS reminder${RESET}"
 echo "    UDP ports cannot be Cloudflare-proxied."

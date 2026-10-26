@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 #
 # GSA Self-Healing Watchdog
 #
@@ -22,7 +23,7 @@
 #
 # Usage:
 #   ./scripts/self-heal.sh [options]
-#   ./scripts/self-heal.sh --container cryofall --port 6000
+#   ./scripts/self-heal.sh --container <supported-container> --port <udp-port>
 #   ./scripts/self-heal.sh --daemon     # run in background via systemd
 #
 # Environment variables:
@@ -46,8 +47,8 @@ log_fix() { echo -e "[$(ts)] ${BLUE}HEAL FIX${RESET}    $*"; }
 log_crit(){ echo -e "[$(ts)] ${RED}HEAL CRIT${RESET}   $*" >&2; }
 
 # ─── Defaults ─────────────────────────────────────────────────────────────────
-CONTAINER="${1:-cryofall}"
-SERVICE="gsa-${CONTAINER}"
+CONTAINER="${1:-}"
+SERVICE=""
 UDP_PORT="6000"
 INTERVAL="${SELFHEAL_INTERVAL:-30}"
 MAX_RESTARTS="${SELFHEAL_MAX_RESTARTS:-5}"
@@ -65,6 +66,17 @@ while [[ $# -gt 0 ]]; do
         *) shift ;;
     esac
 done
+
+if [[ -z "${CONTAINER}" ]]; then
+    log_crit "An explicit supported container is required; CryoFall's legacy watchdog is retired."
+    exit 2
+fi
+SERVICE="${SERVICE:-gsa-${CONTAINER}}"
+
+if [[ "${CONTAINER}" == "cryofall" ]]; then
+    log_crit "CryoFall's legacy self-healer is retired: port binding alone is not readiness and automatic restart/restore is not instance-aware."
+    exit 2
+fi
 
 RESTART_COUNT=0
 DEGRADED=0

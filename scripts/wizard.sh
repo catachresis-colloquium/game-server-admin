@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+# SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 #
 # GSA Server Setup Wizard — fire-and-forget provisioning
 #
@@ -16,11 +17,11 @@
 # Usage:
 #   ./scripts/wizard.sh [--game <profile-id>] [--unattended] [--dry-run]
 #   ./scripts/wizard.sh                     # interactive (default)
-#   ./scripts/wizard.sh --game cryofall     # skip game selection
+#   ./scripts/wizard.sh --game <profile-id> # skip game selection
 #   ./scripts/wizard.sh --unattended        # no prompts, use env vars
 #
 # Environment variables for --unattended mode:
-#   WIZARD_GAME              Game profile ID (e.g. cryofall)
+#   WIZARD_GAME              Game profile ID
 #   WIZARD_SERVER_NAME       Display name for the server
 #   WIZARD_MAX_PLAYERS       Max concurrent players
 #   WIZARD_IS_PVE            true/false
@@ -37,6 +38,10 @@
 #   WIZARD_SKIP_STAGE        1 = skip game file download (already staged)
 
 set -euo pipefail
+
+echo "Legacy profile-based wizard is retired; it cannot provision the deployment-instance model." >&2
+echo "Use an explicitly qualified deployment flow for the selected game." >&2
+exit 2
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -127,7 +132,7 @@ if [[ -z "${GAME}" ]] && [[ "${UNATTENDED}" == "0" ]]; then
         echo -e "    ${BOLD}${NAME}${RESET}  (${DISPLAY})"
     done
     echo ""
-    GAME="$(prompt "Game profile" "cryofall")"
+    GAME="$(prompt "Game profile" "minecraft-java")"
 fi
 
 if [[ -z "${GAME}" ]]; then
@@ -138,6 +143,12 @@ fi
 if [[ ! -f "${REPO_ROOT}/profiles/${GAME}.a2ml" ]]; then
     log_error "Profile not found: profiles/${GAME}.a2ml"
     exit 1
+fi
+
+if [[ "${GAME}" == "cryofall" ]]; then
+    log_error "CryoFall's legacy wizard path is retired: it assumes authenticated Steam login, obsolete paths and profile-based provisioning."
+    log_info "The qualified CryoFall path is read-only and requires an explicitly declared deployment instance."
+    exit 2
 fi
 
 log_ok "Game: ${GAME}"
@@ -345,12 +356,12 @@ else
     if [[ -n "${TARGET_HOST}" ]]; then
         VOL_PATH=$(ssh "${TARGET_HOST}" \
             "podman volume inspect cryofall-game-data --format '{{.Mountpoint}}'" 2>/dev/null || true)
-        if [[ -n "${VOL_PATH}" ]] && ssh "${TARGET_HOST}" "test -f '${VOL_PATH}/CryoFall_Server.x86_64'" 2>/dev/null; then
+        if [[ -n "${VOL_PATH}" ]] && ssh "${TARGET_HOST}" "test -f '${VOL_PATH}/CryoFall_Server.dll'" 2>/dev/null; then
             STAGED=1
         fi
     else
         VOL_PATH=$(podman volume inspect cryofall-game-data --format '{{.Mountpoint}}' 2>/dev/null || true)
-        if [[ -n "${VOL_PATH}" ]] && [[ -f "${VOL_PATH}/CryoFall_Server.x86_64" ]]; then
+        if [[ -n "${VOL_PATH}" ]] && [[ -f "${VOL_PATH}/CryoFall_Server.dll" ]]; then
             STAGED=1
         fi
     fi
@@ -361,7 +372,7 @@ else
         log_info "Game files not found — starting SteamCMD download..."
 
         STEAM_ARGS=(
-            "--app-id" "1200170"
+            "--app-id" "1061710"
         )
         [[ -n "${TARGET_HOST}" ]] && STEAM_ARGS+=("--target-host" "${TARGET_HOST}")
 
@@ -413,8 +424,7 @@ echo "  ╚═══════════════════════
 echo -e "${RESET}"
 
 echo -e "  ${BOLD}Connection${RESET}"
-echo -e "    Server:   cryofall.jewell.nexus:6000 (UDP)"
-echo -e "    Fallback: ${PROBE_HOST}:6000 (UDP)"
+echo -e "    Server:   ${PROBE_HOST}:${PORTS_UDP%% *} (UDP)"
 echo ""
 echo -e "  ${BOLD}Admin operators${RESET}"
 [[ -n "${OP1_ID}" ]] && echo -e "    ${OP1_INPUT:-op1}  →  ${OP1_ID}"
@@ -422,19 +432,16 @@ echo -e "  ${BOLD}Admin operators${RESET}"
 if [[ "${OP2_ID}" =~ ^NEEDS_STEAM64 ]]; then
     echo ""
     log_warn "${OP2_INPUT}'s Steam64 ID couldn't be resolved automatically."
-    log_info "Once you know it, edit container/cryofall/Settings.xml <Operators>"
-    log_info "then restart: just cryofall-restart"
+    log_info "Use the game's documented operator mechanism to add this ID."
 fi
 echo ""
 echo -e "  ${BOLD}Manage via GSA${RESET}"
-echo -e "    just cryofall-status    ← health check"
-echo -e "    just cryofall-logs      ← live server output"
-echo -e "    just cryofall-restart   ← restart server"
-echo -e "    GSA GUI → CryoFall → Actions panel"
+echo -e "    gsa instance status --file <instance.json> --id <instance-id> --host-id <host-key>"
+echo -e "    gsa instance logs --file <instance.json> --id <instance-id> --host-id <host-key>"
 echo ""
 echo -e "  ${BOLD}Self-heal watchdog${RESET}"
-echo -e "    just cryofall-watchdog  ← start background health monitor"
+echo -e "    Legacy profile-based watchdogs are not instance-aware."
 echo ""
 echo -e "  ${BOLD}DNS${RESET}"
-echo -e "    cryofall.jewell.nexus → 209.42.26.106 (grey-cloud, live in Cloudflare)"
+echo -e "    Use a DNS-only record for game UDP endpoints; HTTP proxies do not carry game traffic."
 echo ""

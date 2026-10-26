@@ -36,6 +36,7 @@ test {
     _ = @import("minecraft_systemd_inspect.zig"); // allowlisted projection shared by fixture/live collector
     _ = @import("deployment_instance_loader.zig");
     _ = @import("minecraft_live_collector.zig");
+    _ = @import("cryofall_live_collector.zig");
 }
 pub const groove_client = @import("groove_client.zig");
 pub const steam_client = @import("steam_client.zig");

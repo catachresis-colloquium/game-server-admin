@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 //
 // Game Server Admin — Server action dispatcher
 //
@@ -913,6 +914,13 @@ pub export fn gossamer_gsa_write_server_config(
         return @intFromEnum(main.GsaResult.invalid_param);
     }
 
+    // The historical CryoFall XML projection does not match the current
+    // SettingsServer.xml schema and must never write a fabricated Settings.xml.
+    if (std.mem.eql(u8, profile_id, "cryofall")) {
+        main.setErrorStr("CryoFall config writes are retired pending a verified game-specific parser");
+        return @intFromEnum(main.GsaResult.err);
+    }
+
     // Parse config fields
     const cfg_parsed = std.json.parseFromSlice(std.json.Value, allocator, config_str, .{}) catch {
         main.setErrorStr("invalid config JSON");
@@ -1252,6 +1260,12 @@ test "run_script rejects path traversal" {
 test "write_server_config rejects a traversal profile_id" {
     const rc = gossamer_gsa_write_server_config("../../etc", "{}", "[]");
     try std.testing.expectEqual(@intFromEnum(main.GsaResult.invalid_param), rc);
+}
+
+test "write_server_config rejects CryoFall before creating obsolete Settings.xml" {
+    const rc = gossamer_gsa_write_server_config("cryofall", "{}", "[]");
+    try std.testing.expectEqual(@intFromEnum(main.GsaResult.err), rc);
+    try std.testing.expectError(error.FileNotFound, std.fs.cwd().access("container/cryofall/Settings.xml", .{}));
 }
 
 test "legacy logs refuse ambiguous probes and declared inventory before executing" {

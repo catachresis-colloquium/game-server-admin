@@ -1,0 +1,4 @@
+UNCONN 0 0 0.0.0.0:6000 0.0.0.0:* users:(("dotnet",pid=4123,fd=71))
+UNCONN 0 0 0.0.0.0:6100 0.0.0.0:* users:(("dotnet",pid=4123,fd=72))
+UNCONN 0 0 0.0.0.0:61000 0.0.0.0:* users:(("dotnet",pid=4123,fd=73))
+UNCONN 0 0 0.0.0.0:6000 0.0.0.0:* users:(("dotnet",pid=9999,fd=74))

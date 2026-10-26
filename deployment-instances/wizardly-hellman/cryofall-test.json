@@ -1,0 +1,49 @@
+{
+  "contract": {
+    "name": "gsa.deployment-instance",
+    "version": "0.1.0"
+  },
+  "id": "cryofall-test",
+  "profile_id": "cryofall",
+  "host": "wizardly-hellman",
+  "runtime": {
+    "type": "systemd",
+    "identity": "cryofall-test.service"
+  },
+  "ports": [
+    { "protocol": "udp", "port": 6000, "purpose": "game" },
+    { "protocol": "udp", "port": 6100, "purpose": "lan-discovery" },
+    { "protocol": "udp", "port": 61000, "purpose": "lan-discovery" }
+  ],
+  "paths": {
+    "data": ["/opt/gsa-cryofall-qualification"],
+    "config": ["/opt/gsa-cryofall-qualification/Data/SettingsServer.xml"],
+    "world": ["/opt/gsa-cryofall-qualification/Data/Saves"]
+  },
+  "game": {
+    "version": "1.33.1.15",
+    "update_channel": null,
+    "mods": []
+  },
+  "resources": {
+    "memory": {
+      "minimum": null,
+      "maximum": "1536M"
+    }
+  },
+  "backup": {
+    "policy_ref": null
+  },
+  "capabilities": {
+    "probe": { "enabled": true, "mode": "read-only" },
+    "config": { "enabled": true, "mode": "read-only" },
+    "logs": { "enabled": true, "mode": "read-only" },
+    "lifecycle": {
+      "start": false,
+      "stop": false,
+      "restart": false,
+      "update": false
+    },
+    "backup": { "enabled": false }
+  }
+}
