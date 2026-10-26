@@ -72,7 +72,7 @@ fn parseInspect(text: []const u8, expected_name: []const u8) !RawInspect {
     const pid = std.mem.trim(u8, fields.next() orelse return error.MalformedInspect, " \r\n");
     if (fields.next() != null or !validContainerName(name) or !std.mem.eql(u8, name, expected_name)) return error.ContainerMismatch;
     if (id.len < 12 or id.len > 64 or image_id.len < 12 or image_id.len > 64) return error.MalformedInspect;
-    if (!oneOf(state, &.{ "created", "running", "paused", "restarting", "removing", "exited", "dead" })) return error.MalformedInspect;
+    if (!oneOf(state, &.{ "configured", "created", "initialized", "running", "stopped", "paused", "exited", "stopping", "restarting", "removing", "dead", "unknown" })) return error.MalformedInspect;
     return .{ .name = name, .id = id, .image_id = image_id, .state = state, .pid = pid };
 }
 
@@ -103,34 +103,129 @@ fn validateRequest(declaration: *const model.Instance, id: []const u8, host_key:
     if (!validContainerName(declaration.runtime.identity)) return error.InvalidContainer;
 }
 
-fn parseAttribute(xml: []const u8, key: []const u8) ?u16 {
-    if (xml.len > MAX_OUTPUT) return null;
-    var pos: usize = 0;
-    while (std.mem.indexOfPos(u8, xml, pos, key)) |at| {
-        const after = at + key.len;
-        if (at > 0 and (std.ascii.isAlphanumeric(xml[at - 1]) or xml[at - 1] == '_' or xml[at - 1] == '-')) {
-            pos = after;
-            continue;
+const SettingsPorts = struct { game: ?u16 = null, query: ?u16 = null };
+
+fn isNameStart(c: u8) bool {
+    return std.ascii.isAlphabetic(c) or c == '_' or c == ':';
+}
+
+fn isNameChar(c: u8) bool {
+    return isNameStart(c) or std.ascii.isDigit(c) or c == '-' or c == '.';
+}
+
+fn skipSpace(xml: []const u8, index: *usize) void {
+    while (index.* < xml.len and std.ascii.isWhitespace(xml[index.*])) : (index.* += 1) {}
+}
+
+fn skipMarkup(xml: []const u8, index: *usize) !void {
+    var quote: ?u8 = null;
+    while (index.* < xml.len) : (index.* += 1) {
+        const c = xml[index.*];
+        if (quote) |q| {
+            if (c == q) quote = null;
+        } else if (c == '"' or c == '\'') {
+            quote = c;
+        } else if (c == '>') {
+            index.* += 1;
+            return;
         }
-        var i = after;
-        while (i < xml.len and (xml[i] == ' ' or xml[i] == '\t')) : (i += 1) {}
-        if (i >= xml.len or xml[i] != '=') {
-            pos = after;
-            continue;
-        }
-        i += 1;
-        while (i < xml.len and (xml[i] == ' ' or xml[i] == '\t')) : (i += 1) {}
-        if (i >= xml.len or (xml[i] != '"' and xml[i] != '\'')) return null;
-        const quote = xml[i];
-        i += 1;
-        const start = i;
-        while (i < xml.len and xml[i] != quote) : (i += 1) {}
-        if (i >= xml.len) return null;
-        const port = std.fmt.parseInt(u16, xml[start..i], 10) catch return null;
-        if (port == 0) return null;
-        return port;
     }
-    return null;
+    return error.MalformedXml;
+}
+
+fn skipUntil(xml: []const u8, index: *usize, terminator: []const u8) !void {
+    const end = std.mem.indexOfPos(u8, xml, index.*, terminator) orelse return error.MalformedXml;
+    index.* = end + terminator.len;
+}
+
+fn parsePortValue(value: []const u8) !u16 {
+    if (value.len == 0) return error.InvalidPort;
+    for (value) |c| if (!std.ascii.isDigit(c)) return error.InvalidPort;
+    const port = std.fmt.parseInt(u16, value, 10) catch return error.InvalidPort;
+    if (port == 0) return error.InvalidPort;
+    return port;
+}
+
+fn parseSettingsStartTag(xml: []const u8, index: *usize) !SettingsPorts {
+    // `index` points just after the exact element name `serversettings`.
+    var ports = SettingsPorts{};
+    while (true) {
+        skipSpace(xml, index);
+        if (index.* >= xml.len) return error.MalformedSettingsElement;
+        if (xml[index.*] == '>') {
+            index.* += 1;
+            return ports;
+        }
+        if (xml[index.*] == '/' and index.* + 1 < xml.len and xml[index.* + 1] == '>') {
+            index.* += 2;
+            return ports;
+        }
+        if (!isNameStart(xml[index.*])) return error.MalformedSettingsAttribute;
+        const name_start = index.*;
+        index.* += 1;
+        while (index.* < xml.len and isNameChar(xml[index.*])) : (index.* += 1) {}
+        const name = xml[name_start..index.*];
+        skipSpace(xml, index);
+        if (index.* >= xml.len or xml[index.*] != '=') return error.MalformedSettingsAttribute;
+        index.* += 1;
+        skipSpace(xml, index);
+        if (index.* >= xml.len or (xml[index.*] != '"' and xml[index.*] != '\'')) return error.MalformedSettingsAttribute;
+        const quote = xml[index.*];
+        index.* += 1;
+        const value_start = index.*;
+        while (index.* < xml.len and xml[index.*] != quote) : (index.* += 1) {
+            if (xml[index.*] == '<') return error.MalformedSettingsAttribute;
+        }
+        if (index.* >= xml.len) return error.MalformedSettingsAttribute;
+        const value = xml[value_start..index.*];
+        index.* += 1;
+        if (std.mem.eql(u8, name, "port")) {
+            if (ports.game != null) return error.DuplicatePortAttribute;
+            ports.game = try parsePortValue(value);
+        } else if (std.mem.eql(u8, name, "queryport")) {
+            if (ports.query != null) return error.DuplicatePortAttribute;
+            ports.query = try parsePortValue(value);
+        }
+    }
+}
+
+fn parseServerSettingsPorts(xml: []const u8) !SettingsPorts {
+    if (xml.len > MAX_OUTPUT) return error.InputTooLarge;
+    var index: usize = 0;
+    var found: ?SettingsPorts = null;
+    while (index < xml.len) {
+        const start = std.mem.indexOfScalarPos(u8, xml, index, '<') orelse break;
+        index = start + 1;
+        if (std.mem.startsWith(u8, xml[start..], "<!--")) {
+            try skipUntil(xml, &index, "-->");
+            continue;
+        }
+        if (std.mem.startsWith(u8, xml[start..], "<?")) {
+            try skipUntil(xml, &index, "?>");
+            continue;
+        }
+        if (std.mem.startsWith(u8, xml[start..], "<![CDATA[")) {
+            try skipUntil(xml, &index, "]]>");
+            continue;
+        }
+        if (index >= xml.len) return error.MalformedXml;
+        if (xml[index] == '!' or xml[index] == '/') {
+            try skipMarkup(xml, &index);
+            continue;
+        }
+        if (!isNameStart(xml[index])) return error.MalformedXml;
+        const name_start = index;
+        index += 1;
+        while (index < xml.len and isNameChar(xml[index])) : (index += 1) {}
+        const name = xml[name_start..index];
+        if (std.mem.eql(u8, name, "serversettings")) {
+            if (found != null) return error.DuplicateSettingsElement;
+            found = try parseSettingsStartTag(xml, &index);
+        } else {
+            try skipMarkup(xml, &index);
+        }
+    }
+    return found orelse error.SettingsElementMissing;
 }
 
 fn configuredPorts(a: std.mem.Allocator, declaration: *const model.Instance) ![]const u16 {
@@ -138,9 +233,10 @@ fn configuredPorts(a: std.mem.Allocator, declaration: *const model.Instance) ![]
     if (declaration.paths.config.len == 0) return &.{};
     const xml = std.fs.cwd().readFileAlloc(a, declaration.paths.config[0], MAX_OUTPUT) catch return &.{};
     defer a.free(xml);
+    const settings_ports = try parseServerSettingsPorts(xml);
     var ports: std.ArrayList(u16) = .empty;
-    if (parseAttribute(xml, "port")) |port| try ports.append(a, port);
-    if (parseAttribute(xml, "queryport")) |port| {
+    if (settings_ports.game) |port| try ports.append(a, port);
+    if (settings_ports.query) |port| {
         if (ports.items.len == 0 or ports.items[0] != port) try ports.append(a, port);
     }
     return ports.toOwnedSlice(a);
@@ -216,6 +312,28 @@ fn sanitizeLogs(a: std.mem.Allocator, input: []const u8, requested: u16) ![]cons
     return output.toOwnedSlice(a);
 }
 
+fn combineLogStreams(a: std.mem.Allocator, stdout: []const u8, stderr: []const u8) ![]const u8 {
+    if (stdout.len > MAX_OUTPUT or stderr.len > MAX_OUTPUT or stdout.len + stderr.len > MAX_OUTPUT) return error.OutputTooLarge;
+    var combined: std.ArrayList(u8) = .empty;
+    errdefer combined.deinit(a);
+    try combined.appendSlice(a, stdout);
+    if (stdout.len > 0 and stderr.len > 0 and stdout[stdout.len - 1] != '\n' and stderr[0] != '\n') try combined.append(a, '\n');
+    if (combined.items.len + stderr.len > MAX_OUTPUT) return error.OutputTooLarge;
+    try combined.appendSlice(a, stderr);
+    return combined.toOwnedSlice(a);
+}
+
+fn runLogs(a: std.mem.Allocator, argv: []const []const u8, timeout_ms: u32) ![]const u8 {
+    var cancel = process.Cancel{};
+    const result = try process.run(a, argv, false, timeout_ms, &cancel);
+    defer a.free(result.output);
+    defer a.free(result.error_output);
+    // Podman may return a useful diagnostic on stderr with a nonzero exit.
+    // Timeout, cancellation, transport, and output-limit failures remain errors.
+    if ((result.status != .completed and result.status != .failed) or result.exit_code == null) return error.ReadCommandFailed;
+    return combineLogStreams(a, result.output, result.error_output);
+}
+
 /// Collects from one locally accessible, explicitly selected Podman identity.
 /// This performs reads only and never invokes a lifecycle command.
 pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []const u8, host_key: []const u8, requested_logs: ?u16) !Inspection {
@@ -238,7 +356,7 @@ pub fn collect(a: std.mem.Allocator, snapshot: *const registry.Snapshot, id: []c
     if (requested_logs) |line_count| {
         const lines = try std.fmt.allocPrint(scratch, "{d}", .{@min(@as(usize, if (line_count == 0) 1 else line_count), MAX_LOG_LINES)});
         const log_argv = [_][]const u8{ "podman", "logs", "--tail", lines, identity };
-        const full = try run(scratch, &log_argv, 5000);
+        const full = try runLogs(scratch, &log_argv, 5000);
         defer scratch.free(full);
         logs = try sanitizeLogs(scratch, full, line_count);
     }
@@ -304,17 +422,27 @@ test "Barotrauma collector checks selected identity and capabilities before runt
     const text = "barotrauma-test|0123456789ab|0123456789ab|running|42";
     try std.testing.expectEqual(@as(u32, 42), try std.fmt.parseInt(u32, (try parseInspect(text, "barotrauma-test")).pid, 10));
     try std.testing.expectError(error.ContainerMismatch, parseInspect("other|0123456789ab|0123456789ab|running|42", "barotrauma-test"));
+    for ([_][]const u8{ "configured", "created", "initialized", "running", "stopped", "paused", "exited", "stopping", "restarting", "removing", "dead", "unknown" }) |state| {
+        const state_line = try std.fmt.allocPrint(std.testing.allocator, "barotrauma-test|0123456789ab|0123456789ab|{s}|42", .{state});
+        defer std.testing.allocator.free(state_line);
+        _ = try parseInspect(state_line, "barotrauma-test");
+    }
+    try std.testing.expectError(error.MalformedInspect, parseInspect("barotrauma-test|0123456789ab|0123456789ab|garbage|42", "barotrauma-test"));
+    try std.testing.expectError(error.MalformedInspect, parseInspect("barotrauma-test|0123456789ab|0123456789ab|stopping-now|42", "barotrauma-test"));
     const before = try parseInspect("barotrauma-test|0123456789ab|0123456789ab|running|42", "barotrauma-test");
     const after = try parseInspect("barotrauma-test|0123456789ab|0123456789ab|exited|0", "barotrauma-test");
     try std.testing.expect(!sameContainer(before, after));
 }
 
 test "Barotrauma config projects configured UDP ports without exposing XML" {
-    const xml = "<serversettings port=\"27015\" queryport='27016' password=\"must-not-leak\"/>";
-    try std.testing.expectEqual(@as(?u16, 27015), parseAttribute(xml, "port"));
-    try std.testing.expectEqual(@as(?u16, 27016), parseAttribute(xml, "queryport"));
-    try std.testing.expectEqual(@as(?u16, null), parseAttribute(xml, "missing"));
-    try std.testing.expectEqual(@as(?u16, null), parseAttribute("<settings port=\"bad\"/>", "port"));
+    const xml = "<!-- port=\"1234\" --><root note=\"unrelated\">unrelated port=\"3456\"<other port=\"4567\"/><serversettings port=\"27015\" queryport='27016' password=\"must-not-leak\"/></root>";
+    const ports_found = try parseServerSettingsPorts(xml);
+    try std.testing.expectEqual(@as(?u16, 27015), ports_found.game);
+    try std.testing.expectEqual(@as(?u16, 27016), ports_found.query);
+    try std.testing.expectError(error.InvalidPort, parseServerSettingsPorts("<serversettings port=\"bad\"/>"));
+    try std.testing.expectError(error.MalformedSettingsAttribute, parseServerSettingsPorts("<serversettings port=27015/>"));
+    try std.testing.expectError(error.DuplicatePortAttribute, parseServerSettingsPorts("<serversettings port=\"27015\" port=\"25565\"/>"));
+    try std.testing.expectError(error.DuplicateSettingsElement, parseServerSettingsPorts("<serversettings port=\"27015\"/><serversettings port=\"25565\"/>"));
     const a = std.testing.allocator;
     const disabled: model.Instance = .{
         .id = "barotrauma-test",
@@ -333,6 +461,21 @@ test "Barotrauma logs are tail-bounded and secret-marked lines are omitted" {
     const safe = try sanitizeLogs(std.testing.allocator, "ready\nserver password=hidden\nSteamInternal_SetMinidumpSteamID=private\n\x1b[6n\nround ended\n", 2);
     defer std.testing.allocator.free(safe);
     try std.testing.expectEqualStrings("ready\nround ended", safe);
+}
+
+test "Barotrauma log projection keeps sanitized stderr diagnostics within the shared cap" {
+    const a = std.testing.allocator;
+    const stderr_only = try runLogs(a, &.{ "/bin/sh", "-c", "printf 'podman stderr-only diagnostic\\npassword=hidden\\nSteamID=private\\n' >&2; exit 1" }, 1000);
+    defer a.free(stderr_only);
+    const safe_stderr_only = try sanitizeLogs(a, stderr_only, 20);
+    defer a.free(safe_stderr_only);
+    try std.testing.expectEqualStrings("podman stderr-only diagnostic", safe_stderr_only);
+    const combined = try combineLogStreams(a, "ordinary stdout", "podman stderr diagnostic\npassword=hidden\nSteamID=private");
+    defer a.free(combined);
+    const safe = try sanitizeLogs(a, combined, 20);
+    defer a.free(safe);
+    try std.testing.expectEqualStrings("ordinary stdout\npodman stderr diagnostic", safe);
+    try std.testing.expectError(error.OutputTooLarge, combineLogStreams(a, &([_]u8{'a'} ** MAX_OUTPUT), "b"));
 }
 
 test "Barotrauma observed UDP evidence parses the selected container network namespace" {
