@@ -63,6 +63,30 @@ pub fn loadFile(a: std.mem.Allocator, target: *registry.Registry, expected_id: [
     try loadDocument(a, target, expected_id, bytes);
 }
 
+/// Load every direct `.json` declaration in an operator-owned directory.
+/// The declaration's own required `id` remains the identity; no identity is
+/// synthesized from a filename or profile. Duplicate IDs fail registration.
+pub fn loadDirectory(a: std.mem.Allocator, target: *registry.Registry, path: []const u8) !usize {
+    var directory = try std.fs.cwd().openDir(path, .{ .iterate = true });
+    defer directory.close();
+    var iterator = directory.iterate();
+    var count: usize = 0;
+    while (try iterator.next()) |entry| {
+        if (entry.kind != .file or !std.mem.endsWith(u8, entry.name, ".json")) continue;
+        if (count >= 128) return error.TooManyInstanceDocuments;
+        const file_path = try std.fmt.allocPrint(a, "{s}/{s}", .{ path, entry.name });
+        defer a.free(file_path);
+        const bytes = try std.fs.cwd().readFileAlloc(a, file_path, MAX_DOCUMENT_BYTES);
+        defer a.free(bytes);
+        const parsed = try contract.parseInstance(a, bytes);
+        defer parsed.deinit();
+        try loadDocument(a, target, parsed.value.id, bytes);
+        count += 1;
+    }
+    if (count == 0) return error.EmptyInstanceDirectory;
+    return count;
+}
+
 test "instance loader registers only the requested explicit document" {
     const a = std.testing.allocator;
     const bytes = try std.fs.cwd().readFileAlloc(a, "fixtures/deployment-instances/valid/minecraft-survival.json", MAX_DOCUMENT_BYTES);
@@ -102,4 +126,34 @@ test "instance loader accepts the operator-owned production instance definition"
     try std.testing.expectEqualStrings("1G", i.resources.memory.minimum.?);
     try std.testing.expectEqualStrings("2G", i.resources.memory.maximum.?);
     try std.testing.expect(!i.capabilities.lifecycle.start and !i.capabilities.backup.enabled);
+}
+
+test "directory registry loads multiple declared instances and profile-only lookup is ambiguous" {
+    var r = registry.Registry.init(std.testing.allocator);
+    defer r.deinit();
+    try std.testing.expect(try loadDirectory(std.testing.allocator, &r, "fixtures/deployment-instances/valid") >= 3);
+    var view = try r.snapshot(std.testing.allocator);
+    defer view.deinit();
+    try std.testing.expectError(error.AmbiguousInstance, view.resolveLegacy("minecraft-java"));
+    try std.testing.expectEqualStrings("minecraft-java", (try view.lookup("minecraft-survival")).profile_id);
+    try std.testing.expectEqualStrings("minecraft-java", (try view.lookup("minecraft-creative")).profile_id);
+    try std.testing.expectEqualStrings("minecraft-java", (try view.lookup("minecraft-modded")).profile_id);
+}
+
+test "host registry contains two explicit Minecraft deployments without conflating them" {
+    var r = registry.Registry.init(std.testing.allocator);
+    defer r.deinit();
+    try std.testing.expectEqual(@as(usize, 2), try loadDirectory(std.testing.allocator, &r, "deployment-instances/wizardly-hellman"));
+    var view = try r.snapshot(std.testing.allocator);
+    defer view.deinit();
+    const survival = try view.lookup("minecraft-survival");
+    const test_server = try view.lookup("minecraft-test");
+    try std.testing.expectEqualStrings(survival.profile_id, test_server.profile_id);
+    try std.testing.expectEqualStrings("minecraft-java", survival.profile_id);
+    try std.testing.expect(!std.mem.eql(u8, survival.runtime.identity, test_server.runtime.identity));
+    try std.testing.expect(!std.mem.eql(u8, survival.paths.data[0], test_server.paths.data[0]));
+    try std.testing.expect(!std.mem.eql(u8, survival.paths.world[0], test_server.paths.world[0]));
+    try std.testing.expectEqual(@as(u16, 25565), survival.ports[0].port);
+    try std.testing.expectEqual(@as(u16, 25566), test_server.ports[0].port);
+    try std.testing.expectError(error.AmbiguousInstance, view.resolveLegacy("minecraft-java"));
 }

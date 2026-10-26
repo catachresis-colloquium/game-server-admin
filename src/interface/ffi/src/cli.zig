@@ -153,23 +153,25 @@ pub fn main() !void {
     }
 }
 
-/// Production instance operations require one explicit document, ID and local
-/// inventory key. No profile discovery or implicit singleton selection exists.
+/// Production instance operations require an explicit ID and local inventory
+/// key. A single document or operator-owned directory may load declarations;
+/// profile discovery and implicit singleton selection are never used.
 fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File) void {
     const err = std.fs.File.stderr();
     if (args.len < 1) {
-        err.writeAll("Usage: gsa instance <status|inspect|logs> --file PATH --id ID --host-id KEY [--lines N]\n") catch {};
+        err.writeAll("Usage: gsa instance <status|inspect|logs> (--file PATH | --directory DIR) --id ID --host-id KEY [--lines N]\n") catch {};
         std.process.exit(2);
     }
     const action = args[0];
     var path: ?[]const u8 = null;
+    var directory: ?[]const u8 = null;
     var id: ?[]const u8 = null;
     var host: ?[]const u8 = null;
     var lines: u16 = 100;
     var index: usize = 1;
     while (index < args.len) : (index += 2) {
         if (index + 1 >= args.len) break;
-        if (std.mem.eql(u8, args[index], "--file")) path = args[index + 1] else if (std.mem.eql(u8, args[index], "--id")) id = args[index + 1] else if (std.mem.eql(u8, args[index], "--host-id")) host = args[index + 1] else if (std.mem.eql(u8, args[index], "--lines")) {
+        if (std.mem.eql(u8, args[index], "--file")) path = args[index + 1] else if (std.mem.eql(u8, args[index], "--directory")) directory = args[index + 1] else if (std.mem.eql(u8, args[index], "--id")) id = args[index + 1] else if (std.mem.eql(u8, args[index], "--host-id")) host = args[index + 1] else if (std.mem.eql(u8, args[index], "--lines")) {
             lines = std.fmt.parseInt(u16, args[index + 1], 10) catch 0;
         } else {
             err.writeAll("Unknown instance option.\n") catch {};
@@ -177,13 +179,19 @@ fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File)
         }
     }
     const is_inspection = std.mem.eql(u8, action, "inspect") or std.mem.eql(u8, action, "status");
-    if (path == null or id == null or host == null or (!is_inspection and !std.mem.eql(u8, action, "logs"))) {
-        err.writeAll("Explicit --file, --id and --host-id are required; action must be status, inspect or logs.\n") catch {};
+    if ((path == null) == (directory == null) or id == null or host == null or (!is_inspection and !std.mem.eql(u8, action, "logs"))) {
+        err.writeAll("Exactly one of --file or --directory, plus explicit --id and --host-id, is required; action must be status, inspect or logs.\n") catch {};
         std.process.exit(2);
     }
     var registry = deployment_registry.Registry.init(a);
     defer registry.deinit();
-    deployment_loader.loadFile(a, &registry, id.?, path.?) catch {
+    const load_result: anyerror!void = if (path) |file_path|
+        deployment_loader.loadFile(a, &registry, id.?, file_path)
+    else blk: {
+        _ = deployment_loader.loadDirectory(a, &registry, directory.?) catch break :blk error.LoadFailed;
+        break :blk {};
+    };
+    load_result catch {
         err.writeAll("Deployment instance could not be loaded for the requested ID.\n") catch {};
         std.process.exit(1);
     };

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 = First Production Deployment Instance: Minecraft Fabric
-:status: production read-only qualification; no lifecycle actions
+:status: two-instance qualification; lifecycle test actions were limited to minecraft-test.service
 
 This is the first operator-controlled production use of the separately versioned
 `gsa.deployment-instance` contract. It selects `minecraft-survival` explicitly
@@ -11,12 +11,13 @@ the Minecraft service definition.
 
 == Loading and independence
 
-`gsa instance inspect` and `gsa instance logs` require all of `--file`, `--id`,
-and `--host-id`. Each invocation loads only that document into the typed
-deployment registry and selects the exact ID. There is no profile scan, first
-server fallback, implicit instance synthesis, directory scan, VeriSimDB
-requirement, or long-running GSA service dependency. A GSA process or file
-failure therefore cannot prevent Minecraft from starting or running.
+`gsa instance inspect` and `gsa instance logs` require exactly one of `--file`
+or `--directory`, plus `--id` and `--host-id`. A file loads one declaration; a
+directory loads its direct `.json` declarations into one typed registry
+snapshot. Each file's required `id` is used as declared. There is no profile
+discovery, ID synthesis, first-server fallback, VeriSimDB requirement, or
+long-running GSA service dependency. A GSA process or file failure therefore
+cannot prevent Minecraft from starting or running.
 
 The host key is compared as an opaque inventory identifier. This initial
 collector supports local systemd collection only; it does not interpret a host
@@ -68,10 +69,68 @@ this classification does not enable backup execution. There is no verified
 RCON/console save hook, so a live filesystem copy must not be called
 application-consistent. No backup policy reference is fabricated.
 
-This collector is local and read-only. Remote host transport, authorization,
-durable registry storage, backup execution, lifecycle execution, and the second
-Minecraft instance remain outside this slice. GSA remains an optional control
-plane rather than runtime authority.
+This collector is local and read-only. Remote host transport, durable registry
+storage, backup execution, and GSA lifecycle execution remain outside this
+slice. GSA remains an optional control plane rather than runtime authority. A
+disposable second instance is tracked separately in the Phase 3 qualification.
+
+== Phase 3: second instance qualification
+
+The operator-owned directory now contains both
+link:../../deployment-instances/wizardly-hellman/minecraft-survival.json[`minecraft-survival`]
+and
+link:../../deployment-instances/wizardly-hellman/minecraft-test.json[`minecraft-test`].
+Both declare profile `minecraft-java`. The directory loader registers each
+document's explicit ID into the same typed registry; lookup by either ID
+selects only that declaration. The registry test verifies that profile-only
+resolution returns `AmbiguousInstance` for the two Minecraft deployments.
+
+The disposable second installation uses unit `minecraft-test.service`, data
+directory `/opt/minecraft-test`, config
+`/opt/minecraft-test/server.properties`, world `/opt/minecraft-test/world`,
+and TCP port 25566. It uses Minecraft 1.21.11, Fabric Loader 0.18.1, Fabric API
+`0.141.3+1.21.11`, and heap bounds `-Xms512M -Xmx1G`. Its Java server binds to
+`127.0.0.1`; query and RCON are disabled, and no firewall rule was changed.
+The unit runs as the separate `minecraft-test` system user, has a 1280 MiB
+systemd memory ceiling, is not enabled at boot, and has no GSA or production
+unit dependency. Its world was generated fresh; no production world, player
+data, or management secret was copied. The observed world directory contained
+only the initial level metadata and session lock.
+
+At `2026-10-26T00:01:32Z` on boot
+`c59103fe-ff07-4847-a0e3-5b18bdbe3291`, GSA inspected both instances while they
+were active. `minecraft-test` was unit MainPID 54105, InvocationID
+`05547d446a3c4f998466587974576ece`, working directory `/opt/minecraft-test`,
+and 16,295,252 μs into its service invocation. GSA observed a
+TCP listener on port 25566 attributed to PID 54105 at mapped loopback address
+`[::ffff:127.0.0.1]`; configuration independently declared `127.0.0.1:25566`.
+It reported Minecraft 1.21.11, Fabric Loader 0.18.1, Fabric API
+`0.141.3+1.21.11`, the Java 21 executable, and only the allowlisted heap flags.
+Bounded logs were retrieved for this explicit ID.
+
+In the same sample, `minecraft-survival` remained unit MainPID 746, InvocationID
+`72b31b74b3ab46978104f2c5bf56e467`, working directory
+`/opt/minecraft-server`, and its PID-attributed wildcard listener on TCP 25565.
+GSA reported the same Minecraft/Fabric versions and the existing four mods.
+Immediately before and after the test unit's start, overlap, and stop, the
+production unit's PID, InvocationID, active state, working directory, and
+active-enter timestamp matched preflight. Its service was not acted upon.
+
+During overlap, host memory was 3.6 GiB total, 1.1 GiB available, and 124 MiB
+free; swap use rose from about 521 MiB to 531 MiB. The one-minute load average
+was 1.12. The production process RSS was about 1.06 GiB and the test process
+RSS about 560 MiB. After the test stopped, available memory returned to about
+1.6 GiB. The test unit is now inactive and disabled, with its fresh world
+retained for future disposable testing.
+
+The capability/policy layer from PR #119 does not provide a lifecycle
+executor. Therefore, the controlled start and stop were issued against the
+explicit `minecraft-test.service` systemd identity, not through a GSA action.
+The production unit remained unchanged throughout. GSA lifecycle capabilities
+remain disabled for both declarations; GSA status, inspection, and logs are
+instance-targeted. Both instances report the conservative
+`clean_stop_required` backup mode, with no backup policy reference or backup
+execution.
 
 == Operator use
 
@@ -87,6 +146,10 @@ sudo -n ./src/interface/ffi/zig-out/bin/gsa instance inspect \
 sudo -n ./src/interface/ffi/zig-out/bin/gsa instance logs \
   --file deployment-instances/wizardly-hellman/minecraft-survival.json \
   --id minecraft-survival --host-id wizardly-hellman --lines 100
+
+sudo -n ./src/interface/ffi/zig-out/bin/gsa instance inspect \
+  --directory deployment-instances/wizardly-hellman \
+  --id minecraft-survival --host-id wizardly-hellman
 ----
 
 These commands inspect a selected instance only. They do not start, stop,
