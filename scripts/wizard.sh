@@ -39,6 +39,10 @@
 
 set -euo pipefail
 
+echo "Legacy profile-based wizard is retired; it cannot provision the deployment-instance model." >&2
+echo "Use an explicitly qualified deployment flow for the selected game." >&2
+exit 2
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 

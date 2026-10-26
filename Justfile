@@ -436,19 +436,13 @@ game-deploy GAME="" DRY="0":
     fi
     PROVISION_DRY_RUN="{{ DRY }}" bash scripts/provision-server.sh "${GAME}"
 
-# ─── Fire-and-forget wizard ───────────────────────────────────────────────────
-# Complete end-to-end server provisioning including Steam auth and game download.
-# Set environment variables before running:
-#   STEAM_USER, STEAM_PASS, GSA_STEAM_API_KEY (optional, for ID resolution)
-#   WIZARD_TARGET_HOST (optional, for remote Verpex deployment)
+# ─── Retired profile-based wizard ────────────────────────────────────────────
+# It predates deployment-instance provisioning and cannot safely create current deployments.
+wizard:
+    bash scripts/wizard.sh
 
-# Interactive wizard — prompts for all values
-wizard GAME="minecraft-java":
-    bash scripts/wizard.sh --game {{ GAME }}
-
-# Unattended wizard — reads all values from environment
-wizard-auto GAME="minecraft-java":
-    WIZARD_GAME="{{ GAME }}" bash scripts/wizard.sh --game {{ GAME }} --unattended
+wizard-auto:
+    bash scripts/wizard.sh --unattended
 
 # Resolve a Steam vanity URL to a Steam64 ID
 # Usage: just steam-resolve VANITY=hyperpolymath API_KEY=<your-key>

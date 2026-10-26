@@ -288,6 +288,7 @@ pub fn collect(allocator: std.mem.Allocator, snapshot: *const registry.Snapshot,
     errdefer arena.deinit();
     const a = arena.allocator();
     const declaration = try snapshot.lookup(instance_id);
+    try validateReadCapabilities(declaration, requested_log_lines);
     if (!std.mem.eql(u8, declaration.host, local_host_key)) return error.HostMismatch;
     if (declaration.runtime.type != .systemd) return error.UnsupportedRuntime;
     if (!std.mem.eql(u8, declaration.profile_id, "cryofall")) return error.UnsupportedProfile;
@@ -369,12 +370,14 @@ pub fn collect(allocator: std.mem.Allocator, snapshot: *const registry.Snapshot,
     }
 
     const game_data = try std.fs.path.join(a, &.{ data, "Data" });
-    if (try latestServerLog(a, game_data)) |log_path| {
-        if (readFile(a, log_path, 8 * 1024 * 1024)) |raw| {
-            defer a.free(raw);
-            if (active) world_activated = currentRunActivated(raw);
-            if (requested_log_lines) |count| log_text = try logTail(a, raw, count);
-        } else |_| {}
+    if (declaration.capabilities.logs.enabled) {
+        if (try latestServerLog(a, game_data)) |log_path| {
+            if (readFile(a, log_path, 8 * 1024 * 1024)) |raw| {
+                defer a.free(raw);
+                if (active) world_activated = currentRunActivated(raw);
+                if (requested_log_lines) |count| log_text = try logTail(a, raw, count);
+            } else |_| {}
+        }
     }
     if (active) if (pid) |active_pid| if (configured_port) |port| {
         game_socket_bound = findPort(sockets, port, active_pid);
@@ -433,6 +436,14 @@ pub fn collect(allocator: std.mem.Allocator, snapshot: *const registry.Snapshot,
     };
 }
 
+fn validateReadCapabilities(declaration: *const model.Instance, requested_log_lines: ?u16) !void {
+    if (!declaration.capabilities.probe.enabled) return error.ProbeCapabilityDisabled;
+    // This inspection projection includes the configured port and config path. Decline
+    // before I/O rather than reading config and suppressing its values afterward.
+    if (!declaration.capabilities.config.enabled) return error.ConfigCapabilityDisabled;
+    if (requested_log_lines != null and !declaration.capabilities.logs.enabled) return error.LogsCapabilityDisabled;
+}
+
 test "CryoFall fixture config reads only the allowlisted game port" {
     const a = std.testing.allocator;
     const xml = try std.fs.cwd().readFileAlloc(a, "fixtures/cryofall/SettingsServer.xml", 65536);
@@ -443,6 +454,49 @@ test "CryoFall fixture config reads only the allowlisted game port" {
     try std.testing.expect(std.mem.indexOf(u8, safe_projection, "fixture-secret") == null);
     try std.testing.expectError(error.MalformedConfig, parseConfiguredPort("<server-settings><port>6000.5</port></server-settings>"));
     try std.testing.expectEqual(@as(?u16, null), try parseConfiguredPort("<server-settings/>"));
+}
+
+test "CryoFall collector fails closed before reads when probe capability is disabled" {
+    var declaration: model.Instance = .{
+        .id = "cryofall-test",
+        .profile_id = "cryofall",
+        .host = "local",
+        .runtime = .{ .type = .systemd, .identity = "cryofall-test.service" },
+        .game = .{ .version = "unknown" },
+    };
+    declaration.capabilities.config.enabled = true;
+    declaration.capabilities.logs.enabled = true;
+    declaration.capabilities.probe.enabled = false;
+    try std.testing.expectError(error.ProbeCapabilityDisabled, validateReadCapabilities(&declaration, null));
+}
+
+test "CryoFall collector declines config projection before reading config when disabled" {
+    var declaration: model.Instance = .{
+        .id = "cryofall-test",
+        .profile_id = "cryofall",
+        .host = "local",
+        .runtime = .{ .type = .systemd, .identity = "cryofall-test.service" },
+        .game = .{ .version = "unknown" },
+    };
+    declaration.capabilities.probe.enabled = true;
+    declaration.capabilities.logs.enabled = true;
+    declaration.capabilities.config.enabled = false;
+    try std.testing.expectError(error.ConfigCapabilityDisabled, validateReadCapabilities(&declaration, null));
+}
+
+test "CryoFall requested logs fail closed when logs capability is disabled" {
+    const declaration: model.Instance = .{
+        .id = "cryofall-test",
+        .profile_id = "cryofall",
+        .host = "local",
+        .runtime = .{ .type = .systemd, .identity = "cryofall-test.service" },
+        .game = .{ .version = "unknown" },
+    };
+    var enabled = declaration;
+    enabled.capabilities.probe.enabled = true;
+    enabled.capabilities.config.enabled = true;
+    try std.testing.expectError(error.LogsCapabilityDisabled, validateReadCapabilities(&enabled, 10));
+    try validateReadCapabilities(&enabled, null);
 }
 
 test "CryoFall sockets and startup markers are tied to the selected PID and game port" {
