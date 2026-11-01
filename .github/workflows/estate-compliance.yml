@@ -107,7 +107,13 @@ jobs:
           FAIL=0
           for f in $FILES; do
             if command -v ijson-jcs >/dev/null 2>&1; then
-              ijson-jcs check "$f"; RC=$?
+              # Exit 1 means noncanonical but valid (advisory). Under set -e,
+              # capture the status through a conditional so classification runs.
+              if ijson-jcs check "$f"; then
+                RC=0
+              else
+                RC=$?
+              fi
               if [ "$RC" -eq 2 ]; then
                 echo "::error file=$f::I-JSON invalid for $f (via ijson-jcs, exit $RC)"
                 FAIL=1
