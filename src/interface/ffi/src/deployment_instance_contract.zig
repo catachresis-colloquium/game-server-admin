@@ -83,6 +83,26 @@ pub fn validateFixtureSet(allocator: Allocator, input: []const u8) !void {
     }
 }
 
+/// Resolve an explicitly selected instance ID in an already parsed, owned set.
+/// This is a pure fixture-side lookup, NOT a live registry or authorization.
+/// Validate every entry and refuse duplicates anywhere in the set, even when
+/// the requested entry is unique. Never guess from profile_id or array order.
+/// The returned pointer borrows `instances`; the caller owns its lifetime.
+pub fn resolveInstance(instances: []const Instance, target_id: []const u8) !*const Instance {
+    if (!isId(target_id)) return error.InvalidIdentity;
+
+    for (instances, 0..) |instance, i| {
+        try validate(instance);
+        for (instances[0..i]) |prior| {
+            if (std.mem.eql(u8, prior.id, instance.id)) return error.DuplicateInstanceId;
+        }
+    }
+    for (instances) |*instance| {
+        if (std.mem.eql(u8, instance.id, target_id)) return instance;
+    }
+    return error.InstanceNotFound;
+}
+
 fn validate(instance: Instance) !void {
     if (!std.mem.eql(u8, instance.contract.name, CONTRACT_NAME) or
         !std.mem.eql(u8, instance.contract.version, CONTRACT_VERSION)) return error.UnsupportedInstanceContract;
@@ -301,4 +321,33 @@ test "deployment instances: unknown resource and policy metadata stays unknown" 
     defer known.deinit();
     try std.testing.expect(known.value.resources.memory.minimum == null);
     try std.testing.expectEqualStrings("2G", known.value.resources.memory.maximum.?);
+}
+
+test "deployment instances: explicit selection is by unique instance ID, never profile or position" {
+    const allocator = std.testing.allocator;
+    const survival_json = try readFixture(fixture_root ++ "valid/minecraft-survival.json");
+    defer allocator.free(survival_json);
+    const survival = try parseInstance(allocator, survival_json);
+    defer survival.deinit();
+
+    const creative_json = try readFixture(fixture_root ++ "valid/minecraft-creative.json");
+    defer allocator.free(creative_json);
+    const creative = try parseInstance(allocator, creative_json);
+    defer creative.deinit();
+
+    const instances = [_]Instance{ survival.value, creative.value };
+    const selected = try resolveInstance(&instances, "minecraft-creative");
+    try std.testing.expectEqualStrings("minecraft-creative", selected.id);
+    try std.testing.expectEqualStrings("minecraft-java", selected.profile_id);
+    try std.testing.expectEqualStrings("gsa-fixture-minecraft-creative.service", selected.runtime.identity);
+
+    // The shared profile ID is not a deployment ID and there is no fallback.
+    try std.testing.expectError(error.InstanceNotFound, resolveInstance(&instances, "minecraft-java"));
+    try std.testing.expectError(error.InstanceNotFound, resolveInstance(&instances, "not-tracked"));
+    try std.testing.expectError(error.InvalidIdentity, resolveInstance(&instances, "bad id"));
+    try std.testing.expectError(error.InstanceNotFound, resolveInstance(&[_]Instance{}, "minecraft-creative"));
+
+    // Duplicates anywhere in a supplied set must be rejected before selection.
+    const duplicated = [_]Instance{ survival.value, creative.value, survival.value };
+    try std.testing.expectError(error.DuplicateInstanceId, resolveInstance(&duplicated, "minecraft-creative"));
 }
