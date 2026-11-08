@@ -24,6 +24,7 @@ const deployment_loader = @import("deployment_instance_loader.zig");
 const minecraft_live = @import("minecraft_live_collector.zig");
 const cryofall_live = @import("cryofall_live_collector.zig");
 const barotrauma_live = @import("barotrauma_live_collector.zig");
+const boston_live = @import("boston_live_collector.zig");
 
 /// Check if a file exists (Zig 0.15.2 compat — no std.fs.exists).
 fn fileExists(path: []const u8) bool {
@@ -260,6 +261,20 @@ fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File)
             out.writeAll(json) catch {};
             out.writeAll("\n") catch {};
         }
+    } else if (std.mem.eql(u8, target.profile_id, "boston-unlocked")) {
+        const output = if (std.mem.eql(u8, action, "logs"))
+            boston_live.logs(a, &snapshot, id.?, host.?, lines) catch {
+                err.writeAll("BostonUnlocked log retrieval failed.\n") catch {};
+                std.process.exit(1);
+            }
+        else
+            boston_live.inspect(a, &snapshot, id.?, host.?) catch {
+                err.writeAll("BostonUnlocked inspection failed.\n") catch {};
+                std.process.exit(1);
+            };
+        defer a.free(output);
+        out.writeAll(output) catch {};
+        out.writeAll("\n") catch {};
     } else if (std.mem.eql(u8, target.profile_id, "barotrauma")) {
         if (std.mem.eql(u8, action, "logs")) {
             const safe_logs = barotrauma_live.collectLogs(a, &snapshot, id.?, host.?, lines) catch |failure| {
