@@ -18,7 +18,7 @@ const REGISTRY = {
     display: "Game Server Admin (GSA)",
     version: "0.9.0",
     license: "AGPL-3.0-or-later",
-    repo:    "https://github.com/hyperpolymath/game-server-admin",
+    repo:    "https://github.com/catachresis-colloquium/game-server-admin",
   },
   launchers: {
     bash:    "play.sh",      // existing homoiconic bash launcher

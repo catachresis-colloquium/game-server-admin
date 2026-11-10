@@ -7,14 +7,14 @@
 ;;
 ;;   (channel
 ;;     (name 'game-server-admin)
-;;     (url "https://github.com/hyperpolymath/game-server-admin")
+;;     (url "https://github.com/catachresis-colloquium/game-server-admin")
 ;;     (branch "main"))
 ;;
 ;; Then: guix pull
 
 (channel
   (version 0)
-  (url "https://github.com/hyperpolymath/game-server-admin")
+  (url "https://github.com/catachresis-colloquium/game-server-admin")
   (dependencies
    (channel
      (name 'guix)

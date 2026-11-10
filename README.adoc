@@ -3,7 +3,7 @@ Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
 ____
 [!TIP] *AI-Assisted Install:* Just tell any AI assistant: +
 `+Set+` `+up+` `+game-server-admin+` `+from+`
-https://github.com/hyperpolymath/game-server-admin[`+https://github.com/hyperpolymath/game-server-admin+`] +
+https://github.com/catachresis-colloquium/game-server-admin[`+https://github.com/catachresis-colloquium/game-server-admin+`] +
 The AI reads the manifest, asks you a few questions, and handles
 everything.
 ____

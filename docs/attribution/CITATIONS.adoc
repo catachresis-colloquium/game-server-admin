@@ -9,26 +9,26 @@
   author = {Jewell, Jonathan},
   title = {game-server-admin},
   year = {2026},
-  url = {https://github.com/hyperpolymath/game-server-admin},
+  url = {https://github.com/catachresis-colloquium/game-server-admin},
   license = {AGPL-3.0-or-later}
 }
 ----
 
 == Harvard Style
 
-Jewell, JDAJ (2026) _game-server-admin_ [Computer software]. Available at: https://github.com/hyperpolymath/game-server-admin
+Jewell, JDAJ (2026) _game-server-admin_ [Computer software]. Available at: https://github.com/catachresis-colloquium/game-server-admin
 
 == OSCOLA
 
-Jonathan D.A. Jewell, 'game-server-admin' (2026) <https://github.com/hyperpolymath/game-server-admin>
+Jonathan D.A. Jewell, 'game-server-admin' (2026) <https://github.com/catachresis-colloquium/game-server-admin>
 
 == MLA
 
-Jewell, Jonathan "game-server-admin." 2026, github.com/hyperpolymath/game-server-admin.
+Jewell, Jonathan "game-server-admin." 2026, github.com/catachresis-colloquium/game-server-admin.
 
 == APA 7
 
-Jewell, JDAJ (2026). _game-server-admin_ [Computer software]. GitHub. https://github.com/hyperpolymath/game-server-admin
+Jewell, JDAJ (2026). _game-server-admin_ [Computer software]. GitHub. https://github.com/catachresis-colloquium/game-server-admin
 
 == See Also
 

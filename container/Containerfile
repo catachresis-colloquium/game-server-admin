@@ -39,8 +39,8 @@ FROM cgr.dev/chainguard/wolfi-base:latest
 # OCI image labels
 LABEL org.opencontainers.image.title="game-server-admin" \
       org.opencontainers.image.description="Universal game server probe, config management, and administration via Gossamer + VeriSimDB" \
-      org.opencontainers.image.url="https://github.com/hyperpolymath/game-server-admin" \
-      org.opencontainers.image.source="https://github.com/hyperpolymath/game-server-admin" \
+      org.opencontainers.image.url="https://github.com/catachresis-colloquium/game-server-admin" \
+      org.opencontainers.image.source="https://github.com/catachresis-colloquium/game-server-admin" \
       org.opencontainers.image.vendor="hyperpolymath" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
       org.opencontainers.image.authors="Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>" \

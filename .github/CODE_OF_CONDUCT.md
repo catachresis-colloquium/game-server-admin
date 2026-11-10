@@ -310,7 +310,7 @@ We thank these communities for their leadership in creating welcoming spaces.
 
 If you have questions about this Code of Conduct:
 
-- Open a [Discussion](https://github/hyperpolymath/game-server-admin/discussions) (for general questions)
+- Open a [Discussion](https://github/catachresis-colloquium/game-server-admin/discussions) (for general questions)
 - Email j.d.a.jewell@open.ac.uk (for private questions)
 - Contact any maintainer directly
 

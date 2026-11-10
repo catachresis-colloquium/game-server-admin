@@ -3,9 +3,9 @@
 # See: https://github.com/hyperpolymath/gv-clade-index
 
 [identity]
-uuid = "09f76bd7-df4b-5494-8aff-1dca67b00488"
+uuid = "8af3e89b-bbcf-5422-aef4-3b3dde4392e7"
 primary-forge = "github"
-primary-owner = "hyperpolymath"
+primary-owner = "catachresis-colloquium"
 canonical-name = "game-server-admin"
 prefixed-name = "ix-game-server-admin"
 
@@ -16,7 +16,7 @@ assigned = "2026-03-22"
 rationale = "Infrastructure tool for universal game server management; secondary gm (game-specific profiles and fingerprinting) and db (VeriSimDB-backed config storage with drift detection)"
 
 [forges]
-github = "hyperpolymath/game-server-admin"
+github = "catachresis-colloquium/game-server-admin"
 gitlab = "hyperpolymath/game-server-admin"
 bitbucket = "hyperpolymath/game-server-admin"
 

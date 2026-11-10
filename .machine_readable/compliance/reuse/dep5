@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: game-server-admin
 Upstream-Contact: Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-Source: https://github.com/hyperpolymath/game-server-admin
+Source: https://github.com/catachresis-colloquium/game-server-admin
 
 # Default: all files are AGPL-3.0-or-later
 Files: *

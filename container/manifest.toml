@@ -16,11 +16,11 @@ cerro-torre .ctp bundle with Ed25519 signing and full provenance
 tracking.
 """
 license = "AGPL-3.0-or-later"
-homepage = "https://github/hyperpolymath/game-server-admin"
+homepage = "https://github/catachresis-colloquium/game-server-admin"
 maintainer = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 
 [provenance]
-upstream = "https://github/hyperpolymath/game-server-admin"
+upstream = "https://github/catachresis-colloquium/game-server-admin"
 import_date = 2026-03-22T00:00:00Z
 
 [dependencies]

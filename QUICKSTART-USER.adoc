@@ -12,7 +12,7 @@ Get up and running in 60 seconds.
 
 [source,bash]
 ----
-git clone https://github.com/hyperpolymath/game-server-admin
+git clone https://github.com/catachresis-colloquium/game-server-admin
 cd game-server-admin
 just doctor    # check toolchain
 just heal      # auto-install missing tools
@@ -48,4 +48,4 @@ just run profiles
 * `just help-me` — common workflows
 * `just doctor` — diagnose toolchain issues
 * `just run help` — CLI usage
-* https://github.com/hyperpolymath/game-server-admin/issues — report bugs
+* https://github.com/catachresis-colloquium/game-server-admin/issues — report bugs

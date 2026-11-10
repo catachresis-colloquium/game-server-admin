@@ -1,5 +1,5 @@
 # Clone the repository
-git clone https://github/hyperpolymath/game-server-admin.git
+git clone https://github/catachresis-colloquium/game-server-admin.git
 cd game-server-admin
 
 # Using Guix (recommended for reproducibility)
@@ -91,10 +91,10 @@ Use the [feature request template](.github/ISSUE_TEMPLATE/feature_request.md) an
 
 Look for issues labelled:
 
-- [`good first issue`](https://github/hyperpolymath/game-server-admin/labels/good%20first%20issue) — Simple Perimeter 3 tasks
-- [`help wanted`](https://github/hyperpolymath/game-server-admin/labels/help%20wanted) — Community help needed
-- [`documentation`](https://github/hyperpolymath/game-server-admin/labels/documentation) — Docs improvements
-- [`perimeter-3`](https://github/hyperpolymath/game-server-admin/labels/perimeter-3) — Community sandbox scope
+- [`good first issue`](https://github/catachresis-colloquium/game-server-admin/labels/good%20first%20issue) — Simple Perimeter 3 tasks
+- [`help wanted`](https://github/catachresis-colloquium/game-server-admin/labels/help%20wanted) — Community help needed
+- [`documentation`](https://github/catachresis-colloquium/game-server-admin/labels/documentation) — Docs improvements
+- [`perimeter-3`](https://github/catachresis-colloquium/game-server-admin/labels/perimeter-3) — Community sandbox scope
 
 ---
 

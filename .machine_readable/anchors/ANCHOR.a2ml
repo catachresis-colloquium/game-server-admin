@@ -9,7 +9,7 @@ last-updated = "2026-03-22"
 
 [anchor]
 schema = "hyperpolymath.anchor/1"
-repo = "hyperpolymath/game-server-admin"
+repo = "catachresis-colloquium/game-server-admin"
 authority = "upstream-canonical"
 
 purpose = [
