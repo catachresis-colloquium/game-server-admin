@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# Gitleaks configuration — game-server-admin's repo-local config.
+#
+# The shared allowlist is the estate baseline, which the secret-scanner
+# reusable stages into the workspace root as `.gitleaks-estate.toml` when this
+# file extends it (metadatastician/standards
+# config/gitleaks/estate-baseline.toml). A top-level [allowlist] here merges
+# with the baseline's; it does not replace it.
+#
+# Add repo-local suppressions below, never to the estate baseline, unless the
+# entry is true for every repository.
+
+[extend]
+path = ".gitleaks-estate.toml"
+
+# REPO-LOCAL SUPPRESSION — a public git commit SHA, not a credential.
+#
+# Commit 9bf0c9f wrote, in .machine_readable/descriptiles/NEUROSYM.a2ml:19,
+#     ...mirror/secret-scanner = <the full 40-hex SHA of standards@8e48b1c>
+# `generic-api-key` reads the keyword "secret" followed by an assignment of a
+# 40-character value as a key. The value is the public commit
+# metadatastician/standards@8e48b1c ("Repoint the dead required context", #1337,
+# 2026-10-24), which this repository's governance, scorecard and mirror callers
+# pin in their `uses:` lines. The working tree no longer carries the line, but
+# the history pass still reads that commit, and rewriting history is not on the
+# table.
+#
+# A value entry, anchored to the whole secret, as the estate baseline's design
+# rule requires: it suppresses this one value and nothing that merely contains
+# it. No path is allowlisted and no rule is disabled. Canary-checked: a real
+# credential planted in NEUROSYM.a2ml is still reported with this entry live.
+[allowlist]
+description = "game-server-admin: public metadatastician/standards commit SHA 8e48b1c in a NEUROSYM.a2ml comment (history)"
+regexes = [
+  '''^8e48b1caade08a552646adeab66558ac43b4360d$''',
+]
