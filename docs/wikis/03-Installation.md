@@ -49,7 +49,7 @@ flowchart LR
 ## Build & run the CLI
 
 ```bash
-git clone https://github.com/hyperpolymath/game-server-admin
+git clone https://github.com/catachresis-colloquium/game-server-admin
 cd game-server-admin/src/interface/ffi
 
 zig build                 # builds libgsa.so, libgsa.a, and the gsa CLI

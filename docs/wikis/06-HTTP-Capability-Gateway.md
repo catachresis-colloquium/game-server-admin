@@ -114,6 +114,6 @@ A blocked `fetch` cannot be *truly* cancelled in 0.15.2 — the deadline bounds 
 caller's latency, not the worker's socket occupancy. `MAX_OUTSTANDING` bounds how
 far that can accumulate. Actively unblocking would require a hand-rolled HTTP+TLS
 client, which is out of scope for now. This is stated honestly in the module and
-in [PR #63](https://github.com/hyperpolymath/game-server-admin/pull/63).
+in [PR #63](https://github.com/catachresis-colloquium/game-server-admin/pull/63).
 
 → Next: [GUI & Nexus Setup](07-GUI-and-Nexus-Setup.md)

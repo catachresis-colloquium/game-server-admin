@@ -6,6 +6,6 @@ Contact: mailto:j.d.a.jewell@open.ac.uk
 Expires: 2026-12-31T23:59:59.000Z
 Encryption: {{PGP_KEY_URL}}
 Preferred-Languages: en
-Canonical: https://github/hyperpolymath/game-server-admin/.well-known/security.txt
-Policy: https://github/hyperpolymath/game-server-admin/blob/main/SECURITY.md
-Hiring: https://https://github.com/hyperpolymath/game-server-admin/careers
+Canonical: https://github/catachresis-colloquium/game-server-admin/.well-known/security.txt
+Policy: https://github/catachresis-colloquium/game-server-admin/blob/main/SECURITY.md
+Hiring: https://https://github.com/catachresis-colloquium/game-server-admin/careers

@@ -59,8 +59,8 @@ FROM debian:12-slim
 # Labels — OCI standard + Stapeln/cerro-torre integration
 LABEL org.opencontainers.image.title="cryofall-server" \
       org.opencontainers.image.description="CryoFall dedicated server — managed by Game Server Admin" \
-      org.opencontainers.image.url="https://github.com/hyperpolymath/game-server-admin" \
-      org.opencontainers.image.source="https://github.com/hyperpolymath/game-server-admin" \
+      org.opencontainers.image.url="https://github.com/catachresis-colloquium/game-server-admin" \
+      org.opencontainers.image.source="https://github.com/catachresis-colloquium/game-server-admin" \
       org.opencontainers.image.vendor="hyperpolymath" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later" \
       org.opencontainers.image.authors="Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>" \

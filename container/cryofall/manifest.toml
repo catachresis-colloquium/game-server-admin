@@ -18,7 +18,7 @@ Zig FFI layer.  Game files are installed on first start via SteamCMD (AppID
 game.  World saves and server config live in separate persistent volumes.
 """
 license     = "AGPL-3.0-or-later"
-homepage    = "https://github.com/hyperpolymath/game-server-admin"
+homepage    = "https://github.com/catachresis-colloquium/game-server-admin"
 maintainer  = "Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>"
 
 [provenance]

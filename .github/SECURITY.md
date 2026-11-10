@@ -22,7 +22,7 @@ We take security seriously. We appreciate your efforts to responsibly disclose v
 
 The preferred method for reporting security vulnerabilities is through GitHub's Security Advisory feature:
 
-1. Navigate to [Report a Vulnerability](https://github.com/hyperpolymath/game-server-admin/security/advisories/new)
+1. Navigate to [Report a Vulnerability](https://github.com/catachresis-colloquium/game-server-admin/security/advisories/new)
 2. Click **"Report a vulnerability"**
 3. Complete the form with as much detail as possible
 4. Submit — we'll receive a private notification
@@ -173,7 +173,7 @@ If we cannot reach agreement on disclosure timing, we default to 90 days from yo
 
 The following are within scope for security research:
 
-- This repository (`hyperpolymath/game-server-admin`) and all its code
+- This repository (`catachresis-colloquium/game-server-admin`) and all its code
 - Official releases and packages published from this repository
 - Documentation that could lead to security issues
 - Build and deployment configurations in this repository
@@ -292,7 +292,7 @@ Recognition includes:
 To stay informed about security updates:
 
 - **Watch this repository**: Click "Watch" → "Custom" → Select "Security alerts"
-- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/hyperpolymath/game-server-admin/security/advisories)
+- **GitHub Security Advisories**: Published at [Security Advisories](https://github.com/catachresis-colloquium/game-server-admin/security/advisories)
 - **Release notes**: Security fixes noted in [CHANGELOG](CHANGELOG.md)
 
 ### Update Policy
@@ -340,7 +340,7 @@ When using game-server-admin, we recommend:
 
 ## Additional Resources
 
-- [Security Advisories](https://github.com/hyperpolymath/game-server-admin/security/advisories)
+- [Security Advisories](https://github.com/catachresis-colloquium/game-server-admin/security/advisories)
 - [Changelog](CHANGELOG.md)
 - [Contributing Guidelines](CONTRIBUTING.md)
 - [CVE Database](https://cve.mitre.org/)
@@ -352,8 +352,8 @@ When using game-server-admin, we recommend:
 
 | Purpose | Contact |
 |---------|---------|
-| **Security issues** | [Report via GitHub](https://github.com/hyperpolymath/game-server-admin/security/advisories/new) or j.d.a.jewell@open.ac.uk |
-| **General questions** | [GitHub Discussions](https://github.com/hyperpolymath/game-server-admin/discussions) |
+| **Security issues** | [Report via GitHub](https://github.com/catachresis-colloquium/game-server-admin/security/advisories/new) or j.d.a.jewell@open.ac.uk |
+| **General questions** | [GitHub Discussions](https://github.com/catachresis-colloquium/game-server-admin/discussions) |
 | **Other enquiries** | See [README](README.md) for contact information |
 
 ---

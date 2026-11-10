@@ -40,7 +40,7 @@ jobs:
       #
       #   The actions editorconfig-checker/action-editorconfig-checker@51f6331
       #   and haskell-actions/setup@0f8e8c99 are not allowed in
-      #   hyperpolymath/game-server-admin because all actions must be from a
+      #   catachresis-colloquium/game-server-admin because all actions must be from a
       #   repository owned by hyperpolymath, created by GitHub, or verified in
       #   the GitHub Marketplace.
       #
