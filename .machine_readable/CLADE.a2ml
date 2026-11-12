@@ -3,7 +3,7 @@
 # See: https://github.com/hyperpolymath/gv-clade-index
 
 [identity]
-uuid = "8af3e89b-bbcf-5422-aef4-3b3dde4392e7"
+uuid = "09f76bd7-df4b-5494-8aff-1dca67b00488"
 primary-forge = "github"
 primary-owner = "catachresis-colloquium"
 canonical-name = "game-server-admin"
