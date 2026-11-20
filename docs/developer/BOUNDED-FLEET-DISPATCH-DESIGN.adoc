@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Bounded Fleet Dispatch: Internal API
+:revdate: 2026-10-25
+:status: implemented internal/test API; no GUI or C ABI integration
+
+== Boundary
+
+Fleet dispatch accepts explicit immutable instance IDs and resolves every
+target against one owned registry snapshot before starting workers. Results
+retain request order and identify instance, declared host key, action, exit
+status and bounded output. One target's failure does not discard other results.
+Duplicate request IDs and invalid global/per-host limits reject the request;
+unknown IDs, unsupported capabilities, denied callers, unavailable backends,
+unsafe game state or invalid host access reject only that target before its
+operation.
+
+The registry snapshot is stable for the whole batch. Inventory host keys are
+resolved separately to local access or a validated SSH destination. The
+production adapter reuses `server_actions.zig` validation and its existing
+POSIX shell quoting for remote argv. Local/remote aliases cannot silently
+change an explicit SSH route into local execution.
+
+== Concurrency and outcomes
+
+The global limit is 1–32, per-host is 1–8, target lists are limited to 256,
+and action deadlines to 1–300000 ms. Destructive actions default to one
+operation per host; status and logs default to two. These are hard-bounded
+defaults, not scheduling or resource-group policy.
+
+Cancellation prevents queued operations from starting. It does not roll back
+actions already issued. A local execution timeout is reported separately from
+a transport timeout. A remote timeout, SSH exit 255, or lost transport is
+`indeterminate` with `effect_known=false`; GSA never infers that the remote
+side effect did not happen. Results also distinguish cancellation, output
+limit, backend failure, rejection and known exit status. The Linux process
+runner bounds execution time and combined captured output; no automatic retry
+is performed.
+
+Authorization, backend availability, declared capability and game-specific
+safety are separate checks. `resolve_host` runs synchronously during
+preflight before worker startup. `authorize`, `available`, `game_safe` and
+`execute` run during preflight and may also run concurrently from worker
+threads; their callbacks and shared context must be thread-safe. Each callback
+must be bounded and nonblocking except `execute`, which must honor its deadline
+and cancellation token. The allocator passed to `dispatch` must support
+concurrent use until the returned batch is deinitialized. Each execution gets
+an independent result arena, but those arenas share that underlying allocator.
+
+The production adapter currently advertises only
+Linux systemd/Podman start, stop, restart, status and logs. It does not advertise
+update, backup or config validation where the legacy command path lacks a
+matching safe implementation. Resolver and policy callbacks are trusted local
+lookups; executor callbacks receive the deadline and cancellation token.
+
+The implementation is internal Zig API only. It adds no PSSH dependency, GUI,
+C ABI, provisioning, live registry persistence or game-service dependency.
+GSA remains optional: game services do not depend on it to start or run.
+Resource-group scheduling and multi-instance transition/rollback remain
+separate design work; see
+`docs/developer/ACTIVE-INSTANCE-RESOURCE-GROUPS-DESIGN.adoc`.
+
+== Verification
+
+Synthetic inventory and command-capture tests cover local and remote targets,
+partial failure, transport uncertainty, authorization/capability/backend/game
+safety gates, per-host/global concurrency, cancellation before queued work,
+and the validated/quoted command construction path. Process tests use only
+synthetic local commands; no live host, unit, container or game is contacted.
