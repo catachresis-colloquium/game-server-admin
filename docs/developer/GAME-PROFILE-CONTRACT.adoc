@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: CC-BY-SA-4.0
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell <j.d.a.jewell@open.ac.uk>
-= Draft Game-Profile Contract and Fixture Boundary
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
+= Draft Game-Profile and Deployment-Instance Contract Boundaries
 :revdate: 2026-10-25
-:status: draft, test-only; not a canonical contract
+:status: game-profile draft/test-only; deployment-instance contract has a narrow production read-only loader
 
 [IMPORTANT]
 ====
-This document describes an experimental validator slice, not a stable GSA API.
-The JSON descriptor is not loaded by the application. No live adapter, C ABI,
-GUI flow, deployment action, persistence, or server API is added. Maintainer
-approval is required before making the format canonical or migrating existing
-profiles.
+The game-profile JSON descriptor remains experimental and fixture/test-only; it
+is not loaded by the application. The separately versioned deployment-instance
+contract below now has an explicit operator-file loader and a local read-only
+Minecraft collector documented in
+link:MINECRAFT-PRODUCTION-INSTANCE.adoc[the qualification note]. That does not
+change the C ABI, GUI, legacy A2ML registry, provisioning, or game service.
 ====
 
 == Why this boundary exists
@@ -39,7 +41,7 @@ runtime enum identifiers or accepted production defaults.
 A descriptor identifies `contract.name = gsa.game-profile` and
 `contract.version = 0.1.0-draft`; the configuration schema and each optional
 capability carry their own version. Deployment instances use the separate
-fixture/test-only `gsa.deployment-instance` contract described below; instance
+separately versioned `gsa.deployment-instance` contract described below; instance
 identity is not folded into profile or session-summary data. Configuration
 fields are declarative and
 support `string`, `integer`, `number`, `boolean`, `enum`, and opaque `secret-ref`
@@ -112,7 +114,7 @@ validation. Full GitHub CI, live integration, and compatibility with an actual
 SOP server remain unverified. Existing A2ML parser/registry behavior is
 intentionally unchanged; its existing tests remain the compatibility guard.
 
-== Deployment-instance contract 0.1.0 (fixture/test-only)
+== Deployment-instance contract 0.1.0 (fixtures plus narrow production reader)
 
 A game profile describes a game; an instance describes a concrete installation.
 One profile may have many instances. The three Minecraft fixtures share
@@ -160,16 +162,17 @@ exactly `read-only`; `lifecycle`: boolean `start`, `stop`, `restart`, `update`;
 `backup`: boolean `enabled`.
 |===
 
-`deployment_instance_contract.zig` is adjacent to `profile_contract.zig` and
-imported only inside the unit-test block. `parseInstance` owns its parsed
-values until `deinit`; `validateFixtureSet` checks an explicitly supplied JSON
-array, including duplicate instance IDs across hosts. Neither function derives
+`deployment_instance_contract.zig` is adjacent to `profile_contract.zig`.
+`parseInstance` owns parsed values until `deinit`; it is used by fixture checks
+and the explicit operator-file loader. `validateFixtureSet` checks an explicitly
+supplied JSON array, including duplicate instance IDs across hosts. Neither function derives
 an instance ID from a profile ID. Callers must treat `id` and `profile_id` as
 distinct semantic fields even when their string values coincide, as can be
 reasonable for a singleton deployment. Equality is valid and does not establish
 derivation; provenance and stability across revisions cannot be inferred from
 JSON. There is no new collision in the legacy registry because instances are
-not wired into it. Only collection validation rejects duplicate instance IDs.
+not wired into it. Both collection validation and the typed production registry
+reject duplicate instance IDs.
 Standard JSON Schema cannot express uniqueness by a single property; the Zig
 helper and offline fixture script perform that extra check.
 

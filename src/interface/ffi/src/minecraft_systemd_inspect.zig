@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 // Fixture/internal inspection adapter. No process, network, registry or ABI imports.
 const std = @import("std");
 const systemd = @import("systemd_inspect.zig");
 const Allocator = std.mem.Allocator;
-pub const Source = enum { target, collector_clock, systemd_show, active_transition_and_clock, process_argv, server_properties, version_json, fabric_mod_json };
+pub const Source = enum { target, collector_clock, systemd_show, active_transition_and_clock, process_argv, server_properties, version_json, fabric_mod_json, fabric_server_artifact };
 pub const Basis = enum { supplied, observed, configured, derived };
 pub const Evidence = struct { source: Source, field: []const u8, basis: Basis };
 pub fn Field(comptime T: type) type {
@@ -25,11 +26,11 @@ pub const Report = struct {
     working_directory: ?Field([]const u8) = null,
     listener: ?Field(Listener) = null,
     java_executable: ?Field([]const u8) = null,
-    jvm_arguments: Field([]const []const u8),
-    withheld_argument_count: Field(usize),
+    jvm_arguments: ?Field([]const []const u8),
+    withheld_argument_count: ?Field(usize),
     minecraft_version: ?Field([]const u8) = null,
     fabric_loader_version: ?Field([]const u8) = null,
-    mods: []const Mod,
+    mods: ?[]const Mod,
     config_path: ?Field([]const u8) = null,
     world_path: ?Field([]const u8) = null,
 };
@@ -53,7 +54,9 @@ pub const Input = struct {
     process_argv: []const []const u8 = &.{},
     server_properties: ?[]const u8 = null,
     version_json: ?[]const u8 = null,
+    fabric_loader_version: ?[]const u8 = null,
     mod_metadata_json: []const []const u8 = &.{},
+    mod_metadata_known: bool = true,
 };
 
 /// Owns only an allowlisted report. Never retains raw output/config/argv.
@@ -98,6 +101,10 @@ pub fn inspect(allocator: Allocator, input: Input) !Observation {
         try mods.append(a, .{ .id = field([]const u8, try a.dupe(u8, id), .fabric_mod_json, "id", .observed), .version = field([]const u8, try a.dupe(u8, version), .fabric_mod_json, "version", .observed) });
         if (std.mem.eql(u8, id, "fabricloader")) loader = field([]const u8, try a.dupe(u8, version), .fabric_mod_json, "fabricloader.version", .observed);
     }
+    if (loader == null) if (input.fabric_loader_version) |version| {
+        if (!versionText(version)) return error.MalformedVersionMetadata;
+        loader = field([]const u8, try a.dupe(u8, version), .fabric_server_artifact, "fabric loader artifact version", .observed);
+    };
     var report = Report{
         .instance_id = field([]const u8, try a.dupe(u8, input.instance_id), .target, "instance_id", .supplied),
         .observed_at_unix_seconds = field(i64, input.observed_at_unix_seconds, .collector_clock, "unix_seconds", .supplied),
@@ -105,10 +112,10 @@ pub fn inspect(allocator: Allocator, input: Input) !Observation {
         .load_state = field(systemd.LoadState, unit.load, .systemd_show, "LoadState", .observed),
         .active_state = field(systemd.ActiveState, unit.active, .systemd_show, "ActiveState", .observed),
         .java_executable = java,
-        .jvm_arguments = field([]const []const u8, try args.toOwnedSlice(a), .process_argv, "allowlisted JVM flags", .observed),
-        .withheld_argument_count = field(usize, withheld, .process_argv, "withheld count", .derived),
+        .jvm_arguments = if (input.process_argv.len > 0) field([]const []const u8, try args.toOwnedSlice(a), .process_argv, "allowlisted JVM flags", .observed) else null,
+        .withheld_argument_count = if (input.process_argv.len > 0) field(usize, withheld, .process_argv, "withheld count", .derived) else null,
         .fabric_loader_version = loader,
-        .mods = try mods.toOwnedSlice(a),
+        .mods = if (input.mod_metadata_known) try mods.toOwnedSlice(a) else null,
     };
     if (unit.load == .loaded and unit.active == .active) {
         if (unit.active_enter_us) |entered| {
@@ -158,7 +165,7 @@ fn projectProperties(a: Allocator, input: []const u8, report: *Report) !void {
                     // rather than pretending an observed socket exists.
                     if (value.len > 255) return error.InvalidListener;
                     for (value) |c| if (!std.ascii.isAlphanumeric(c) and std.mem.indexOfScalar(u8, ".:[]-", c) == null) return error.InvalidListener;
-                    address = try a.dupe(u8, value);
+                    address = if (value.len == 0) null else try a.dupe(u8, value);
                 },
                 1 => {
                     port = std.fmt.parseInt(u16, value, 10) catch return error.InvalidListener;
@@ -234,13 +241,13 @@ test "Minecraft inspection: active unit projects evidence and withholds secrets"
     try std.testing.expectEqualStrings("127.0.0.1", r.listener.?.value.address.?);
     try std.testing.expectEqual(.configured, r.listener.?.evidence.basis);
     try std.testing.expectEqualStrings("/usr/bin/java", r.java_executable.?.value);
-    try std.testing.expectEqual(@as(usize, 3), r.jvm_arguments.value.len);
-    try std.testing.expectEqual(@as(usize, 4), r.withheld_argument_count.value);
+    try std.testing.expectEqual(@as(usize, 3), r.jvm_arguments.?.value.len);
+    try std.testing.expectEqual(@as(usize, 4), r.withheld_argument_count.?.value);
     try std.testing.expectEqualStrings("1.21.11", r.minecraft_version.?.value);
     try std.testing.expectEqualStrings("0.18.1", r.fabric_loader_version.?.value);
-    try std.testing.expectEqual(@as(usize, 2), r.mods.len);
-    try std.testing.expectEqualStrings("lithium", r.mods[1].id.value);
-    try std.testing.expectEqual(.fabric_mod_json, r.mods[1].version.evidence.source);
+    try std.testing.expectEqual(@as(usize, 2), r.mods.?.len);
+    try std.testing.expectEqualStrings("lithium", r.mods.?[1].id.value);
+    try std.testing.expectEqual(.fabric_mod_json, r.mods.?[1].version.evidence.source);
     try std.testing.expectEqualStrings("/srv/fixture/minecraft-survival/server.properties", r.config_path.?.value);
     try std.testing.expectEqualStrings("/srv/fixture/minecraft-survival/world", r.world_path.?.value);
     const output = try std.json.Stringify.valueAlloc(a, r, .{});
@@ -262,9 +269,52 @@ test "Minecraft inspection: inactive, missing and absent optional evidence" {
         const r = observation.report;
         if (std.mem.eql(u8, name, "missing")) try std.testing.expectEqual(.@"not-found", r.load_state.value);
         if (!std.mem.eql(u8, name, "minimal")) try std.testing.expectEqual(.inactive, r.active_state.value);
+        try std.testing.expect(r.jvm_arguments == null and r.withheld_argument_count == null);
         try std.testing.expect(r.service_uptime_us == null and r.working_directory == null and r.listener == null and r.minecraft_version == null and r.fabric_loader_version == null and r.config_path == null and r.world_path == null);
-        try std.testing.expectEqual(@as(usize, 0), r.mods.len);
+        try std.testing.expectEqual(@as(usize, 0), r.mods.?.len);
     }
+}
+
+test "Minecraft inspection represents unavailable mod inventory as unknown" {
+    var observation = try inspect(std.testing.allocator, .{
+        .instance_id = "minecraft-survival",
+        .unit = "minecraft.service",
+        .observed_at_unix_seconds = 1,
+        .systemctl_show = "Id=minecraft.service\nLoadState=loaded\nActiveState=inactive\n",
+        .mod_metadata_known = false,
+    });
+    defer observation.deinit();
+    try std.testing.expect(observation.report.mods == null);
+}
+
+test "Minecraft inspection keeps active process metadata unknown when proc evidence is absent" {
+    var observation = try inspect(std.testing.allocator, .{
+        .instance_id = "minecraft-survival",
+        .unit = "minecraft.service",
+        .observed_at_unix_seconds = 1,
+        .systemctl_show = "Id=minecraft.service\nLoadState=loaded\nActiveState=active\nMainPID=746\nInvocationID=opaque\n",
+        .mod_metadata_known = false,
+    });
+    defer observation.deinit();
+    try std.testing.expectEqual(.active, observation.report.active_state.value);
+    try std.testing.expect(observation.report.java_executable == null);
+    try std.testing.expect(observation.report.jvm_arguments == null);
+    try std.testing.expect(observation.report.mods == null);
+}
+
+test "Minecraft inspection preserves an unspecified configured bind address as unknown" {
+    const a = std.testing.allocator;
+    var observation = try inspect(a, .{
+        .instance_id = "minecraft-survival",
+        .unit = "minecraft.service",
+        .observed_at_unix_seconds = 1,
+        .systemctl_show = "Id=minecraft.service\nLoadState=loaded\nActiveState=inactive\nWorkingDirectory=/opt/minecraft-server\nActiveEnterTimestampMonotonic=0\n",
+        .server_properties = "server-ip=\nserver-port=25565\nlevel-name=world\n",
+    });
+    defer observation.deinit();
+    try std.testing.expect(observation.report.listener != null);
+    try std.testing.expect(observation.report.listener.?.value.address == null);
+    try std.testing.expectEqual(@as(?u16, 25565), observation.report.listener.?.value.port);
 }
 
 test "Minecraft inspection: malformed evidence fails without echoing raw input" {
@@ -303,8 +353,8 @@ test "Minecraft inspection: arbitrary JVM arguments never become commands or out
         .process_argv = &.{ "/usr/bin/java", "-Xmx2G;touch /tmp/gsa-must-not-exist", "-javaagent:secret-canary", "-Dtoken=secret-canary", "start", "stop", "restart" },
     });
     defer observation.deinit();
-    try std.testing.expectEqual(@as(usize, 0), observation.report.jvm_arguments.value.len);
-    try std.testing.expectEqual(@as(usize, 6), observation.report.withheld_argument_count.value);
+    try std.testing.expectEqual(@as(usize, 0), observation.report.jvm_arguments.?.value.len);
+    try std.testing.expectEqual(@as(usize, 6), observation.report.withheld_argument_count.?.value);
     // Neither this adapter nor the helper contains an executor or callback.
     const argv = try systemd.showArguments("mc.service");
     try std.testing.expectEqualStrings("show", argv[1]);
@@ -316,5 +366,5 @@ test "Minecraft inspection: arbitrary JVM arguments never become commands or out
         .process_argv = &.{ "/usr/bin/java", "-jar", "server.jar", "-Xmx2G" },
     });
     defer after_jar.deinit();
-    try std.testing.expectEqual(@as(usize, 0), after_jar.report.jvm_arguments.value.len);
+    try std.testing.expectEqual(@as(usize, 0), after_jar.report.jvm_arguments.?.value.len);
 }
