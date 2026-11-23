@@ -1,0 +1,16 @@
+{
+  "status": "synthetic test coverage; never executes a game command",
+  "implementation": "src/interface/ffi/src/fleet_dispatch_test.zig",
+  "scenarios": [
+    { "name": "explicit-targets-and-partial-failure", "covered": true },
+    { "name": "mixed-hosts-and-output-attribution", "covered": true },
+    { "name": "unknown-and-invalid-host", "covered": true },
+    { "name": "unsupported-unauthorized-and-game-unsafe", "covered": true },
+    { "name": "bounded-global-and-destructive-per-host-concurrency", "covered": true },
+    { "name": "bounded-read-only-per-host-concurrency", "covered": true },
+    { "name": "queued-cancellation", "covered": true },
+    { "name": "transport-timeout-is-indeterminate", "covered": true },
+    { "name": "duplicate-target-and-invalid-limits", "covered": true },
+    { "name": "existing-action-validation-and-ssh-quoting", "covered": true }
+  ]
+}

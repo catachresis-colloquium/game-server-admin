@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (c) 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+// SPDX-FileCopyrightText: 2026 Joshua Benjamin Jewell <developer@joshuajewell.dev>
 //
 // Game Server Admin — CLI runner
 //
@@ -18,6 +19,9 @@ const probe_mod = @import("probe.zig");
 const game_profiles = @import("game_profiles.zig");
 const verisimdb_client = @import("verisimdb_client.zig");
 const steam_client = @import("steam_client.zig");
+const deployment_registry = @import("deployment_registry.zig");
+const deployment_loader = @import("deployment_instance_loader.zig");
+const minecraft_live = @import("minecraft_live_collector.zig");
 
 /// Check if a file exists (Zig 0.15.2 compat — no std.fs.exists).
 fn fileExists(path: []const u8) bool {
@@ -61,6 +65,8 @@ pub fn main() !void {
         }
         const port: u16 = if (args.len >= 4) std.fmt.parseInt(u16, args[3], 10) catch 27015 else 27015;
         cmdProbe(args[2], port, out);
+    } else if (std.mem.eql(u8, cmd, "instance")) {
+        cmdInstance(allocator, args[2..], out);
     } else if (std.mem.eql(u8, cmd, "config")) {
         if (args.len < 3) {
             const err_f = std.fs.File.stderr();
@@ -144,6 +150,84 @@ pub fn main() !void {
         err_f.writeAll(msg) catch {};
         printUsage(out);
         std.process.exit(1);
+    }
+}
+
+/// Production instance operations require one explicit document, ID and local
+/// inventory key. No profile discovery or implicit singleton selection exists.
+fn cmdInstance(a: std.mem.Allocator, args: []const []const u8, out: std.fs.File) void {
+    const err = std.fs.File.stderr();
+    if (args.len < 1) {
+        err.writeAll("Usage: gsa instance <status|inspect|logs> --file PATH --id ID --host-id KEY [--lines N]\n") catch {};
+        std.process.exit(2);
+    }
+    const action = args[0];
+    var path: ?[]const u8 = null;
+    var id: ?[]const u8 = null;
+    var host: ?[]const u8 = null;
+    var lines: u16 = 100;
+    var index: usize = 1;
+    while (index < args.len) : (index += 2) {
+        if (index + 1 >= args.len) break;
+        if (std.mem.eql(u8, args[index], "--file")) path = args[index + 1] else if (std.mem.eql(u8, args[index], "--id")) id = args[index + 1] else if (std.mem.eql(u8, args[index], "--host-id")) host = args[index + 1] else if (std.mem.eql(u8, args[index], "--lines")) {
+            lines = std.fmt.parseInt(u16, args[index + 1], 10) catch 0;
+        } else {
+            err.writeAll("Unknown instance option.\n") catch {};
+            std.process.exit(2);
+        }
+    }
+    const is_inspection = std.mem.eql(u8, action, "inspect") or std.mem.eql(u8, action, "status");
+    if (path == null or id == null or host == null or (!is_inspection and !std.mem.eql(u8, action, "logs"))) {
+        err.writeAll("Explicit --file, --id and --host-id are required; action must be status, inspect or logs.\n") catch {};
+        std.process.exit(2);
+    }
+    var registry = deployment_registry.Registry.init(a);
+    defer registry.deinit();
+    deployment_loader.loadFile(a, &registry, id.?, path.?) catch {
+        err.writeAll("Deployment instance could not be loaded for the requested ID.\n") catch {};
+        std.process.exit(1);
+    };
+    var snapshot = registry.snapshot(a) catch {
+        err.writeAll("Deployment registry snapshot failed.\n") catch {};
+        std.process.exit(1);
+    };
+    defer snapshot.deinit();
+    if (is_inspection) {
+        var report = minecraft_live.collect(a, &snapshot, id.?, host.?) catch |failure| {
+            var message: [256]u8 = undefined;
+            const text = std.fmt.bufPrint(&message, "Read-only inspection failed ({s}); no lifecycle operation was attempted.\n", .{@errorName(failure)}) catch "Read-only inspection failed.\n";
+            err.writeAll(text) catch {};
+            std.process.exit(1);
+        };
+        defer report.deinit();
+        const safe_output = .{
+            .instance_id = report.instance_id,
+            .profile_id = report.profile_id,
+            .host = report.host,
+            .runtime_identity = report.runtime_identity,
+            .declaration = report.declared,
+            .boot_id = report.boot_id,
+            .sampled_at_unix_seconds = report.sampled_at_unix_seconds,
+            .systemd_main_pid = report.systemd_main_pid,
+            .process = report.process,
+            .observed_socket = report.observed_socket,
+            .backup_mode = report.backup_mode,
+            .inspection = report.report,
+        };
+        const json = std.json.Stringify.valueAlloc(a, safe_output, .{ .whitespace = .indent_2 }) catch {
+            err.writeAll("Inspection serialization failed.\n") catch {};
+            std.process.exit(1);
+        };
+        defer a.free(json);
+        out.writeAll(json) catch {};
+        out.writeAll("\n") catch {};
+    } else {
+        var result = minecraft_live.logs(a, &snapshot, id.?, host.?, lines) catch {
+            err.writeAll("Bounded instance log retrieval failed.\n") catch {};
+            std.process.exit(1);
+        };
+        defer result.deinit();
+        out.writeAll(result.output) catch {};
     }
 }
 
@@ -267,7 +351,7 @@ fn cmdProbe(host: []const u8, port: u16, out: std.fs.File) void {
 fn cmdConfigInit(out: std.fs.File) void {
     const template_path = "user-config.ncl.template";
     const config_path = "user-config.ncl";
-    
+
     // Check if config already exists
     if (fileExists(config_path)) {
         out.writeAll("✗ Config file already exists at ") catch {};
@@ -275,7 +359,7 @@ fn cmdConfigInit(out: std.fs.File) void {
         out.writeAll("\n") catch {};
         return;
     }
-    
+
     // Check if template exists
     if (!fileExists(template_path)) {
         const err_f = std.fs.File.stderr();
@@ -284,7 +368,7 @@ fn cmdConfigInit(out: std.fs.File) void {
         err_f.writeAll("\n") catch {};
         std.process.exit(1);
     }
-    
+
     // Copy template to config
     const template_file = std.fs.cwd().openFile(template_path, .{}) catch |err| {
         const err_f = std.fs.File.stderr();
@@ -294,7 +378,7 @@ fn cmdConfigInit(out: std.fs.File) void {
         std.process.exit(1);
     };
     defer template_file.close();
-    
+
     const config_file = std.fs.cwd().createFile(config_path, .{}) catch |err| {
         const err_f = std.fs.File.stderr();
         err_f.writeAll("✗ Failed to create config file: ") catch {};
@@ -303,7 +387,7 @@ fn cmdConfigInit(out: std.fs.File) void {
         std.process.exit(1);
     };
     defer config_file.close();
-    
+
     // Copy contents
     var buf: [4096]u8 = undefined;
     var bytes_read: usize = 0;
@@ -313,7 +397,7 @@ fn cmdConfigInit(out: std.fs.File) void {
         bytes_read += n;
         _ = config_file.write(buf[0..n]) catch break;
     }
-    
+
     out.writeAll("✓ Created user config from template: ") catch {};
     out.writeAll(config_path) catch {};
     out.writeAll(" (") catch {};
@@ -328,12 +412,12 @@ fn cmdConfigInit(out: std.fs.File) void {
 /// Show current config
 fn cmdConfigShow(out: std.fs.File) void {
     const config_path = "user-config.ncl";
-    
+
     if (!fileExists(config_path)) {
         out.writeAll("✗ No config file found. Run `gsa config init` to create one.\n") catch {};
         return;
     }
-    
+
     const file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
         const err_f = std.fs.File.stderr();
         err_f.writeAll("✗ Failed to read config: ") catch {};
@@ -342,11 +426,11 @@ fn cmdConfigShow(out: std.fs.File) void {
         std.process.exit(1);
     };
     defer file.close();
-    
+
     out.writeAll("=== User Config (") catch {};
     out.writeAll(config_path) catch {};
     out.writeAll(") ===\n\n") catch {};
-    
+
     var buf: [4096]u8 = undefined;
     while (true) {
         const n = file.read(&buf) catch 0;
@@ -358,12 +442,12 @@ fn cmdConfigShow(out: std.fs.File) void {
 /// Set default server
 fn cmdConfigSetDefault(host: []const u8, port: u16, out: std.fs.File) void {
     const config_path = "user-config.ncl";
-    
+
     if (!fileExists(config_path)) {
         out.writeAll("✗ No config file found. Run `gsa config init` first.\n") catch {};
         return;
     }
-    
+
     // Read existing config
     const file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
         const err_f = std.fs.File.stderr();
@@ -373,7 +457,7 @@ fn cmdConfigSetDefault(host: []const u8, port: u16, out: std.fs.File) void {
         std.process.exit(1);
     };
     defer file.close();
-    
+
     // Read the whole file — a fixed 16 KiB buffer silently truncated larger
     // configs (e.g. many favorites), corrupting the rewrite.
     const existing_content = file.readToEndAlloc(std.heap.c_allocator, 1024 * 1024) catch |err| {
@@ -384,7 +468,7 @@ fn cmdConfigSetDefault(host: []const u8, port: u16, out: std.fs.File) void {
         std.process.exit(1);
     };
     defer std.heap.c_allocator.free(existing_content);
-    
+
     // Simple string replacement for default server
     // In a real implementation, you'd use a proper Nickel parser
     // For now, we'll do a simple pattern replacement
@@ -400,7 +484,7 @@ fn cmdConfigSetDefault(host: []const u8, port: u16, out: std.fs.File) void {
     defer out_file.close();
 
     writeWithDefaultServer(existing_content, host, port, out_file) catch {};
-    
+
     out.writeAll("✓ Updated default server to ") catch {};
     out.writeAll(host) catch {};
     out.writeAll(":") catch {};
@@ -413,12 +497,12 @@ fn cmdConfigSetDefault(host: []const u8, port: u16, out: std.fs.File) void {
 /// Add a favorite server
 fn cmdConfigAddFavorite(name: []const u8, host: []const u8, port: u16, out: std.fs.File) void {
     const config_path = "user-config.ncl";
-    
+
     if (!fileExists(config_path)) {
         out.writeAll("✗ No config file found. Run `gsa config init` first.\n") catch {};
         return;
     }
-    
+
     // Read existing config
     const file = std.fs.cwd().openFile(config_path, .{}) catch |err| {
         const err_f = std.fs.File.stderr();
@@ -428,7 +512,7 @@ fn cmdConfigAddFavorite(name: []const u8, host: []const u8, port: u16, out: std.
         std.process.exit(1);
     };
     defer file.close();
-    
+
     // Read the whole file — a fixed 16 KiB buffer silently truncated larger
     // configs (e.g. many favorites), corrupting the rewrite.
     const existing_content = file.readToEndAlloc(std.heap.c_allocator, 1024 * 1024) catch |err| {
@@ -439,7 +523,7 @@ fn cmdConfigAddFavorite(name: []const u8, host: []const u8, port: u16, out: std.
         std.process.exit(1);
     };
     defer std.heap.c_allocator.free(existing_content);
-    
+
     // Add favorite to the favorites list
 
     // Write back
@@ -453,7 +537,7 @@ fn cmdConfigAddFavorite(name: []const u8, host: []const u8, port: u16, out: std.
     defer out_file.close();
 
     writeWithFavorite(existing_content, name, host, port, out_file) catch {};
-    
+
     out.writeAll("✓ Added favorite server: ") catch {};
     out.writeAll(name) catch {};
     out.writeAll(" (") catch {};
@@ -468,12 +552,12 @@ fn cmdConfigAddFavorite(name: []const u8, host: []const u8, port: u16, out: std.
 /// List favorite servers
 fn cmdConfigListFavorites(out: std.fs.File) void {
     const config_path = "user-config.ncl";
-    
+
     if (!fileExists(config_path)) {
         out.writeAll("✗ No config file found. Run `gsa config init` first.\n") catch {};
         return;
     }
-    
+
     // In a real implementation, we'd parse the Nickel file
     // For now, just show a message
     out.writeAll("Favorite servers are stored in ") catch {};
@@ -557,14 +641,10 @@ fn cmdSteamResolve(allocator: std.mem.Allocator, vanity_url: []const u8, out: st
         const err_f = std.fs.File.stderr();
         var buf: [256]u8 = undefined;
         const msg = switch (err) {
-            error.VanityNotFound => std.fmt.bufPrint(&buf,
-                "Steam vanity URL not found: '{s}'\n" ++
-                "Check the URL at: https://steamcommunity.com/id/{s}\n",
-                .{ vanity_url, vanity_url }) catch "Vanity URL not found\n",
-            error.HTTPError => std.fmt.bufPrint(&buf,
-                "Steam API request failed — check network connectivity\n", .{}) catch "HTTP error\n",
-            else => std.fmt.bufPrint(&buf,
-                "Steam resolve error: {}\n", .{err}) catch "Error\n",
+            error.VanityNotFound => std.fmt.bufPrint(&buf, "Steam vanity URL not found: '{s}'\n" ++
+                "Check the URL at: https://steamcommunity.com/id/{s}\n", .{ vanity_url, vanity_url }) catch "Vanity URL not found\n",
+            error.HTTPError => std.fmt.bufPrint(&buf, "Steam API request failed — check network connectivity\n", .{}) catch "HTTP error\n",
+            else => std.fmt.bufPrint(&buf, "Steam resolve error: {}\n", .{err}) catch "Error\n",
         };
         err_f.writeAll(msg) catch {};
         std.process.exit(1);
@@ -590,19 +670,17 @@ fn cmdSteamPlayer(allocator: std.mem.Allocator, steam_id: []const u8, out: std.f
         const err_f = std.fs.File.stderr();
         var buf: [256]u8 = undefined;
         const msg = switch (err) {
-            error.PlayerNotFound => std.fmt.bufPrint(&buf,
-                "No Steam player found for ID: {s}\n", .{steam_id}) catch "Player not found\n",
-            error.HTTPError => std.fmt.bufPrint(&buf,
-                "Steam API request failed\n", .{}) catch "HTTP error\n",
-            else => std.fmt.bufPrint(&buf,
-                "Steam player info error: {}\n", .{err}) catch "Error\n",
+            error.PlayerNotFound => std.fmt.bufPrint(&buf, "No Steam player found for ID: {s}\n", .{steam_id}) catch "Player not found\n",
+            error.HTTPError => std.fmt.bufPrint(&buf, "Steam API request failed\n", .{}) catch "HTTP error\n",
+            else => std.fmt.bufPrint(&buf, "Steam player info error: {}\n", .{err}) catch "Error\n",
         };
         err_f.writeAll(msg) catch {};
         std.process.exit(1);
     };
 
     var buf: [512]u8 = undefined;
-    const line = std.fmt.bufPrint(&buf,
+    const line = std.fmt.bufPrint(
+        &buf,
         "Steam64 ID:   {s}\nDisplay name: {s}\nProfile URL:  {s}\nVisibility:   {d}\n",
         .{
             summary.idSlice(),
@@ -650,6 +728,8 @@ fn printUsage(out: std.fs.File) void {
         \\    config list-favorites
         \\                          List favorite servers
         \\    profiles            List available game profiles
+        \\    instance <status|inspect|logs> --file PATH --id ID --host-id KEY
+        \\                          Inspect/log one explicitly declared instance
         \\    version             Print version
         \\    help                Show this help
         \\

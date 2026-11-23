@@ -1,0 +1,92 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath) <j.d.a.jewell@open.ac.uk>
+= Instance Backup and Lifecycle: Policy Before Execution
+:revdate: 2026-10-25
+:status: internal policy API; eligibility only, no execution
+
+== Four independent gates
+
+`src/interface/ffi/src/instance_capabilities.zig` assesses an explicit
+immutable instance ID against an owned registry snapshot. Every decision keeps
+four facts separate:
+
+. The instance declares the requested capability.
+. The caller is authorized for this instance and operation.
+. A matching implementation backend is available.
+. Fresh observed state and game-specific adapter evidence say the operation is
+  safe.
+
+Missing, unknown or stale evidence fails closed. Runtime identity validation is
+backend-specific: systemd accepts direct service-unit names, Podman accepts
+container names, and process runtime currently returns unsupported because no
+process backend exists. The result includes the selected ID, opaque host key, runtime
+identity, each gate result and an eligibility outcome. Eligibility is a policy
+decision only; this module has no command callback and never executes an
+operation or mutates declarations/observations. Callers must recheck authority
+and safety immediately before any later side effect.
+
+The module extends the typed internal model from
+`docs/developer/INSTANCE-REGISTRY-DESIGN.adoc` and the fixture contract in
+`docs/developer/DEPLOYMENT-INSTANCE-DESIGN.adoc`. It does not change deployment
+instance v0.1.0 fields, ABI, GUI, provisioning or runtime service definitions.
+Capability flags describe support; they do not authorize callers. GSA remains
+optional and is not a systemd dependency or prerequisite for a game service.
+
+== Backup modes
+
+|===
+|Mode |Policy meaning
+
+|`unsupported`
+|No backup operation is declared/supported.
+
+|`metadata_only`
+|Policy or scope may be displayed, but GSA cannot execute a backup.
+
+|`hot_application_consistent`
+|Eligible only with fresh state, game-safety approval and a separately
+verified application-consistent hook.
+
+|`clean_stop_required`
+|Eligible only after fresh inactive-state evidence and verified clean-stop
+evidence, and only when the independent game-safety fact is explicitly true.
+Inactive state alone does not prove either safety or a clean stop.
+
+|`externally_managed`
+|Another system owns execution/retention. GSA reports metadata and never treats
+this as GSA execution authority.
+|===
+
+A policy reference does not prove that an archive exists. A successful file
+copy does not prove application consistency. Secret values, credentials,
+console endpoints and inline shell hooks stay outside instance documents.
+
+== Minecraft/Fabric rule
+
+For the `minecraft-java` profile with a declared `fabric-loader` mod, the policy
+forces `clean_stop_required`, even if a caller asks for a hot mode or claims a
+generic adapter. The current service has no RCON or console-input path, so it
+cannot safely run `save-off` or `save-all flush`. No live filesystem copy is
+called application-consistent. A future tested control hook could change this
+only through a deliberate adapter/policy change.
+
+The current module can mark a clean-stop backup eligible only when the selected
+instance has fresh inactive evidence, game safety is explicitly true, and
+trusted adapter evidence confirms the clean stop. False or unknown safety is
+never overwritten by the inactive state. It does not stop a service, copy files, create an archive,
+restart a service or claim that a backup was completed. If it was initially
+stopped, later execution policy must not start it merely to restore prior state.
+
+== Verification and deferred work
+
+Synthetic tests cover all four gates independently, explicit selection,
+backend-specific identity validation, unsupported process runtime, stale/future
+and unknown-state observations, the five backup modes,
+the Minecraft/Fabric clean-stop rule and the fact that assessment leaves the
+registry unchanged. No lifecycle or backup commands run.
+
+Authorization identity/roles, revocation and audit records, races between
+assessment and execution, stop acknowledgements, retention/restore ownership,
+snapshot atomicity, timeout/recovery behavior and real game-specific consistency
+evidence remain future work. Broad execution support is intentionally outside
+this policy slice.
