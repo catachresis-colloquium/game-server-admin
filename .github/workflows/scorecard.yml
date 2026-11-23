@@ -22,8 +22,8 @@ jobs:
     # here — the estate staleness check greps every line for that token and a
     # second match would break its single-pin SHA comparison.
     permissions:
+      actions: read
       contents: read
       security-events: write
       id-token: write
-    uses: hyperpolymath/standards/.github/workflows/scorecard-reusable.yml@8e48b1caade08a552646adeab66558ac43b4360d
-    secrets: inherit
+    uses: metadatastician/standards/.github/workflows/scorecard-reusable.yml@75d38f80b6cb41e9785cf6f0c6ecf60846db7519
