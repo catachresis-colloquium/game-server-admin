@@ -4,6 +4,19 @@
 :author: Jonathan D.A. Jewell
 :revdate: 2026-10-18
 
+[IMPORTANT]
+====
+*Completion-gate update (2026-11-23):* The historical `96% complete`
+figure below describes earlier v0.9.0 phase accounting, *not* the readiness of
+an integrated, production-qualified game-server administration product.
+The evidence-based MVP, production, security, adapter, CI, and release gates
+are now recorded in
+link:docs/ULTRAPLAN-GSA-COMPLETION-2026-11-23.adoc[the GSA completion ultraplan].
+Use that plan for new completion and release claims; retain the historical
+milestones below for traceability, and do not promote open-PR features to
+`main` capabilities until they are integrated and verified.
+====
+
 == Current State
 
 GSA is a game-server discovery, configuration-management, and administration tool.

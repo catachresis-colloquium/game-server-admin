@@ -1,0 +1,385 @@
+// SPDX-License-Identifier: CC-BY-SA-4.0
+// SPDX-FileCopyrightText: 2026 Jonathan D.A. Jewell (hyperpolymath)
+= Ultraplan: Game Server Admin — from inspectable instances to production-quality game-neutral administration
+:revdate: 2026-11-23
+:revnumber: 0.1.0
+:status: WORKING PLAN — not a release certificate
+:toc: left
+:toclevels: 3
+:sectnums:
+
+[IMPORTANT]
+====
+This is an evidence-based completion programme, not a claim that GSA is already production-safe.
+It differentiates code on +main+, proposed changes in open PRs, reported field
+qualifications, and capabilities still to be verified. No host mutation,
+destructive test, restore exercise, or live build was executed during this
+reconnaissance. The previous ROADMAP's 96% and TEST-NEEDS' 100% refer to
+historical phase inventories, not the end-to-end production outcome defined here.
+====
+
+== 0. Scope, baseline, and intended product
+
+Repository: link:https://github.com/catachresis-colloquium/game-server-admin[game-server-admin].
+Inspected +main+ at +9becd3781bd7cef45cce083b023e1ef7111f075c+
+(2026-11-12), tree of 660 tracked blobs, and open PRs #118, #119, #120,
+#121, #122, #123, #124, and draft #130 (observed 2026-11-23).
+This audit used repository contents and the GitHub Actions/PR record; it
+did not reproduce the build or exercise a live target.
+
+*Intension.* GSA is an optional, game-neutral operator/control plane for
+discovery, inspection, configuration, lifecycle orchestration, backup policy,
+and fleet management of independently running dedicated game servers. Its
+core value is an explicit, auditable, safe mapping from a requested
+deployment instance to one observed target and one authorized operation.
+
+*Extension.* The 18 existing profiles are a *legacy compatibility inventory*
+and do not imply 18 qualified operational adapters. A game profile describes
+game behavior/expectations, a deployment declaration identifies an actual
+installation, a collector produces time-bounded observations, and a policy
+decision may permit a *specific* action. The underlying game or service
+remains runtime and simulation authority. No game's normal startup, game
+rules, connection handling, or persistence may require GSA availability.
+
+*In scope:* the CLI, Zig implementation and C ABI, Idris2 authority,
+Gossamer/Ephapax/AffineScript interfaces, local and remote transports,
+instance registry, game adapters, persistence, safety, security, CI/CD,
+deployment, governance, release evidence, and interoperability boundaries.
+
+*Out of scope:* making GSA the game server, relocating game authority into
+GSA, new universal game-specific commands by inference, or automatic
+destructive operations against live player data.
+
+== 1. What the evidence establishes
+
+[cols="1,2,4,3",options="header"]
+|===
+|ID |Classification |Finding |Evidence / consequence
+
+|F-01 |Observed, high confidence |The legacy CLI on +main+ exposes status, probe, profiles, config, and Steam commands; it does not expose an operator-loaded explicit-instance status/inspect/logs path. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/src/interface/ffi/src/cli.zig[cli.zig]; #120/#121 propose it.
+
+|F-02 |Observed, high confidence |An owned typed registry separates immutable instance declarations, snapshots, and timestamped observations; it is not yet a complete live acquisition, authorization, or persistence service. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/src/interface/ffi/src/deployment_registry.zig[deployment_registry.zig] and link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/docs/developer/INSTANCE-REGISTRY-DESIGN.adoc[design].
+
+|F-03 |Observed, high confidence |The legacy action FFI discards its +handle+ parameter, accepts caller-supplied host/runtime/container in JSON, and dispatches directly. Unknown action text maps to status; unknown runtime maps to Podman. Its allowlist checks and remote quoting are useful, but do not supply deployment-specific authorization. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/src/interface/ffi/src/server_actions.zig#L528-L652[server_actions.zig L528–652]. High-impact trust-boundary review required before production writes.
+
+|F-04 |Observed, high confidence |The draft game-profile JSON validator and fixture status projector are not wired to the live ABI, GUI, or runtime registry. Existing A2ML profiles are legacy readers only. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/docs/developer/GAME-PROFILE-CONTRACT.adoc[game-profile contract].
+
+|F-05 |Observed, high confidence |Eight open PRs implement or document independently scoped work. #120→#121→#122→#123→#130 are stacked (with #120 based on phase2-foundation, not directly on current main); #118/#119 branch from main; #124 is a separate documentation-only PR. |link:https://github.com/catachresis-colloquium/game-server-admin/pulls[open PRs]. Mergeable status does not prove integrated CI or operational safety.
+
+|F-06 |Observed, high confidence |The current main SHA has green ABI, Linux, estate compliance, secret, static, and other checks, but no-job failures for Scorecard, Mirror, Governance; the failure cause is not established here. |link:https://github.com/catachresis-colloquium/game-server-admin/actions/runs/43138445704[Estate] and link:https://github.com/catachresis-colloquium/game-server-admin/actions/runs/43138445328[Scorecard].
+
+|F-07 |Observed, high confidence |No published GitHub release was returned. The tag-triggered release workflow exists, but successful release artifacts, reproducibility, installation, rollback, and operator recovery are not evidenced by a completed release. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/.github/workflows/release.yml[release.yml].
+
+|F-08 |Inferred, medium confidence |The risk is less a missing codebase than incomplete *convergence* between existing runtime actions, selected identities, fresh observations, policy decisions, game-specific safety, user-facing controls, and release evidence. |F-01–F-07; confirm with integrated tests.
+
+|F-09 |Observed, high confidence |Older README/ROADMAP/test/runbook statements conflict in phase counts and completion framing, and some documentation links retain old extensions/paths. |link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/ROADMAP.adoc[ROADMAP], link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/TEST-NEEDS.adoc[TEST-NEEDS], and link:https://github.com/catachresis-colloquium/game-server-admin/blob/9becd3781bd7cef45cce083b023e1ef7111f075c/docs/INDEX.adoc[index].
+|===
+
+*Not established:* live usability from a fresh installation, external client
+connectivity for every adapter, true full-GUI integration today, safe remote
+host identity verification, proven save consistency for supported games,
+production SLIs, incident recovery, full release-green status, and a
+calibrated completion percentage. Missing proof is not proof of absence.
+
+== 2. Define completion before optimizing for it
+
+[cols="1,2,4",options="header"]
+|===
+|Gate |Outcome |Observable definition of done
+
+|D0: core works |Discovery/inspection foundations |A clean pinned Zig build, real unit/integration tests, offline profile listing and a controlled probe work with truthful errors, without requiring VeriSimDB.
+
+|M0: basic useful product |Explicit-instance read-only MVP |Operator loads an approved instance declaration; +gsa instances list+, +gsa instance status ID+, +gsa instance inspect ID+, and +gsa instance logs ID+ (illustrative proposed UX) select one exact target. One real disposable server and two instances of the same game prove isolation. No state-changing action is enabled.
+
+|M1: basic administration |Safely controllable single-game MVP |With the operator's explicit authorization and independent game-safety policy, start/stop/restart operate against a disposable or approved instance. No free-form host/container substitution; stale observations, unknown identity, unsupported backend, and missing capabilities fail closed. Post-action state and audit receipt are reconciled.
+
+|P1: production-quality, one qualified game |One game/host configuration supported end-to-end |A documented and exercised deployment + upgrade + rollback, identity/authentication boundary, bounded actions, observable failures, tested backup/restore for its *declared* game-specific mode, failure recovery, correct privacy controls, signed release evidence, and clean applicable required checks.
+
+|P2: multi-game production |Game-neutral product with certified adapters |Separate acceptance matrix and restore/health/control semantics for every advertised adapter, proven fleet concurrency and isolation, cross-host access controls, capacity/resource policies, and operational support model. Unsupported capabilities remain explicitly unsupported.
+|===
+
+*Do not* equate M0 with lifecycle control, M1 with backed-up game state, P1
+with every profile, or an ABI proof with correctness of remote effects. Release
+one tightly qualified product slice first; expand supported games only after
+the adapter-specific gates pass.
+
+== 3. Boundary / seam map
+
+[cols="1,2,3,3",options="header"]
+|===
+|Seam |Boundary |Current evidence |Required contract
+
+|S-01 |GUI / operator to Zig/C ABI |Gossamer panels and legacy C exports exist; raw JSON action entry does not bind caller handle to selected target. |Authenticated operator, explicit instance ID, operation, authorization and confirmation; no raw shell/runtime target selection from an untrusted UI.
+
+|S-02 |Profile to deployment registry |18 A2ML legacy profiles; new typed declarations and fixture contract; draft JSON profile. |Versioned canonical profile ownership, independent instance identity, migration compatibility, fail-closed unknown keys; no new A2ML authoring.
+
+|S-03 |Registry/policy to local runtime and remote SSH |Local exec, systemd, Podman/Docker and SSH quoting/validation exist; #118/#119 propose bounded dispatch and policy. |Host trust identity, explicit backend identity, authorization, allowed argv, finite deadlines/output, idempotent/reconcilable effect status, per-host destructive serialization.
+
+|S-04 |Runtime to observed facts |Timestamped observations in core; #120–#123/#130 propose bounded game collectors. |Source, capture time, host, process/container identity, drift/freshness, allowed fields, unknown instead of invented healthy state.
+
+|S-05 |Game state to backup/restore |Backups appear in legacy scripts, but #122 and #123 identify game-specific checkpoint caveats. |Quiescence/checkpoint contract, verified restore to disposable installation, checksums, retention, encryption, reconciliation and demonstrated recovery point.
+
+|S-06 |Optional VeriSimDB backing |Client and dual-port deployment documented; core probes should work without DB. |Source-of-truth boundary, bounded writes/retries, versioned records, offline behavior and reconciliation on return. DB not a game-runtime dependency.
+
+|S-07 |Idris2 ABI to Zig implementation to UI |Types/Layout/Foreign, generated expectation files and ABI CI checks. |Idris2 authoritative signatures/proofs; Zig FFI matching and executable boundary tests; AffineScript/Ephapax/Gossamer may not silently widen capabilities.
+
+|S-08 |Source/build to shipped software |Many CI jobs, tag release workflow, some failure-only runs; no release found. |Reproducible install artifact, provenance/signing, version compatibility, tests, security, canary, rollback and release postflight.
+|===
+
+=== Aspect-oriented invariant threads
+
+Every interface, adapter, executor, action, and future game must be tested
+against these cross-cutting invariants rather than treating them as one-time
+modules:
+
+* A-01 Identity: an operation selects one explicit, globally unique immutable instance ID and binds the host/runtime object on the same registry snapshot. Profile ID is never sufficient to choose among installations.
+* A-02 Independence: the game keeps running and retaining its save data when GSA, its GUI, SSH transport or VeriSimDB disappears.
+* A-03 Authorized effect: declaration or configuration is never itself authorization; authentication, allowed operation, game-safety policy and current evidence each gate side effects.
+* A-04 Structured uncertainty: separate requested/issued/observed/confirmed actions; after SSH loss, timeout or partial output, report indeterminate rather than asserting success or replaying a destructive action.
+* A-05 Preservation: a backup is not declared good until a representative restore proves the relevant game invariants; SIGTERM success is not evidence of clean checkpointing.
+* A-06 Privacy and provenance: minimize logs, keep secret references opaque, record who/what/why/when and source identity, establish retention/deletion and access rules before player/session data.
+* A-07 Resource safety: bound calls, queues, logs, CPU/memory, concurrency, output and target-specific exclusions; cancel queued operations safely; run no unbounded script through user JSON.
+* A-08 Compatibility: distinguish Idris2 ABI authority, Zig FFI implementation, portable profile/instance contracts, backend adaptors, UI representation and game-owned simulation/authoring contracts.
+
+== 4. Eight-lens assessment
+
+[cols="1,2,4",options="header"]
+|===
+|Lens |Coverage |Assessment and unresolved proof
+
+|A. Wire |Assessed for core; partial for PR branches |S-01–S-07 contract split present; production end-to-end authorization and error semantics not verified.
+|B. Conway / ownership |Partially assessed |Operator/game owner/adapter maintainer/security/release ownership are not fully assigned in this plan; identify accountable sign-off, not fictional teams.
+|C. Run |Partially assessed |CI is active, but no measured production user journey, SLO, actionable alerts and completed disaster-recovery rehearsal were observed.
+|D. Gate |Assessed for material entrypoints |Allowlist, shell quoting, C ABI and HTTP egress exist; independent identity, authorisation and remote trust must be enforced before writes.
+|E. Break |Partially assessed |Fail-closed unknown observations and #118's indeterminate remote effects are promising; test transport loss, cancellation, double issue, process PID churn and shared-host failure.
+|F. Flow |Partially assessed |Immutable declarations vs observation history is good; backups, concurrent mutations and DB consistency need end-to-end proof.
+|G. Evolution |Assessed at design level |Independent instance contract and game-neutral layering are sound; canonize profile format without mass-converting legacy corpus.
+|H. Cost |Not quantified |No supported runtime-load, on-call, storage, log-volume or hosting-cost measurement; estimate only after M0 benchmark and pilot.
+|===
+
+== 5. Dependency-ordered implementation waves
+
+[cols="1,1,3,4,3",options="header"]
+|===
+|Wave |Priority |Change |Exit gate (must be measured) |Dependency / disposition
+
+|G0 |P0 |Freeze baseline, read live CI logs, enumerate all actions, inventories and feature claims; repair pre-existing blocking jobs, lockfile drift, and documentation contradictions; capture reproducible build/test/proof versions. |Re-run unit, property, integration, ABI, Linux build and applicable security/governance jobs on exact commit. Every required check runs and passes or has an approved, documented exception; green must not mean skipped. |Immediate, before feature merge.
+
+|G1 |P0 |Land one live read-only instance loader/collector, preferably the tested Minecraft vertical slice; reject ambiguous profile-only selection, and distinguish declaration, process, listener and reachability. |From clean install: load explicit operator directory, inspect two distinct same-profile services, show correct PID/unit/port attribution, bounded redacted logs, stale/unknown results; no changes to game processes or saves. |Rebase/retarget #120 then #121; respect their parent chain, host-specific fixtures and field evidence.
+
+|G2 |P0 |Establish a single typed policy/decision path for authorizing an operation against an immutable snapshot; remove or contain raw legacy action entrypoints where they bypass it. |Negative ABI/GUI/CLI tests reject wrong handle, unknown instance, mismatch of host/runtime, stale evidence, denied user, unsupported game operation, unknown backend. Verify no command executed on rejection. |Review #119 and #118 separately; integrate only after G1 interface stabilizes, not by indiscriminate branch merging.
+
+|G3 |P0 |Introduce controlled lifecycle actions against one disposable qualifying instance, with explicit user permission, verified remote host, bounded execution and postcondition checks. |start/stop/restart success, failed stop, lost SSH ACK, timeout, cancellation, duplicate request, PID reuse and concurrent competing target tests yield correct state/indeterminate receipts. Other instances remain untouched. |G2. No production write enablement before the safety case.
+
+|G4 |P0 for P1 |Specify each game's backup mode and checkpoint/restore procedure. Restore to an isolated installation and compare game-specific saved invariants. |A representative world/save survives restored startup and client-level verification where supported. Failed/partial restore, missing checkpoint and retention/encryption controls are tested. No generic "backup succeeded" based solely on files existing. |G2/G3, game-specific qualification. CryoFall and Barotrauma notes demand explicit caution.
+
+|G5 |P1 |Bring GUI and AffineScript/Ephapax/Gossamer paths into parity with the tested typed core; normalize user identity, capability visibility, logs, progress, failure handling and accessibility. |A non-expert operator completes the same exact-instance workflows via GUI without access to bypass paths; no extra game authority or unbounded host actions. |G1–G3; optional GUI may be packaged separately for CLI-first P1 if product declaration says so.
+
+|G6 |P0 for release |Package and ship a bounded Linux release; pin environment, remove stale docs, attest artifacts, exercise install/upgrade/rollback, establish monitoring/runbooks, sign release. |Release candidate runs from published artifact on clean host, tests/ABI/profiles/instance smoke pass, SBOM and provenance available, upgrade/rollback works, on-call recovery drill passes, applicable checks green. |G0–G5 for GUI-inclusive P1, or G0–G4 for explicit CLI-only P1.
+
+|G7 |P2 |Expand independently to other qualified game adapters and multi-host fleet management, without changing instance semantics. |Per-game matrix, host trust, resource/collision policy, optional data retention, privacy and backup evidence all approved; fleet concurrency tested with induced partial failures. |After P1; #122/#123/#124/#130 each carry distinct evidence limits.
+|===
+
+=== Open PR integration order and decisions
+
+1. Establish G0 and compare +phase2-foundation+ to +main+ (and current parent SHAs). An open, mergeable PR is not proof that its branch is current or its tests ran on the required base.
+2. Qualify #120 on a fresh branch targeting +main+, then #121 against the merged result. Protect host-specific identifiers and never apply operational deployment files blindly to a new host.
+3. Review #119's *eligibility-only* layer and #118's *bounded dispatch* layer as independent changes. Do not promote either to a live executor simply because its tests pass. Check shared allocator, concurrency, cancellation and output bounds.
+4. Rebase/retarget #122 after #121, then #123 after #122, and draft #130 after #123. #122 modifies a legacy CryoFall A2ML profile: examine the exact delta against the prohibition on extending retired A2ML, distinguish pure compatibility repair from new authoring, and seek owner ruling if ambiguous.
+5. #124 is documentation-only and can be independently reviewed. Its Windows/.NET and client-asset constraints are not evidence of Linux/runtime qualification. Keep #130 draft until its operator-owned declaration, environment, and client-readiness scope are approved.
+6. Keep #125 (Burble relay / IDApTIK) separate from the game-server authority: GSA should observe a declared relay/service instance, not manage the match simulation. #111's fleet requirement is not complete until #118 is integrated and verified.
+
+Do not merge an open branch solely to remove the backlog. Each merge requires
+formatting, ABI checks if touched, on-base CI, tests, documented applicability
+and a checked post-merge SHA. Close issues only against verified acceptance.
+
+== 6. Security and correctness blocking experiments
+
+These are *planned tests*, not executed results. Start in a disposable
+host/container, preserve a known-good baseline, and do not inject failure
+into a live player server without separate scope approval.
+
+[cols="1,2,3,3",options="header"]
+|===
+|Test |Injection / threat |Required outcome |Abort / recovery
+
+|E-01 |Send a valid-looking raw FFI action with a forged host/container and irrelevant handle. |No side effect; exact-instance policy and operator authorization prevent target substitution. |Isolated fake executor records zero dispatch; stop test if live target is addressed.
+
+|E-02 |Change registry observation between selection and command; simulate PID reuse or unit/container replacement. |Identity checked at issue time and after observation; stale proof fails closed, not "healthy". |Disable writes, reconcile against fresh collector state.
+
+|E-03 |Cut SSH after remote issuance but before acknowledgment; retry same operation. |Report indeterminate effect; never blindly replay a destructive command; reconcile before retry. |Query actual service state via fresh channel; manual authorization for recovery.
+
+|E-04 |Force timeout, huge stdout/stderr, stuck child, simultaneous stop/start on same host. |Bounded result size, deadline and concurrency; cancellation safe; no false success on truncated output. |Kill disposable child, restore known state, compare process and audit logs.
+
+|E-05 |Stop during a game's active save, then backup and restore. |Detect unsafe checkpoint, mark backup unsupported/failure, no corrupted restore presented as success. |Operate only on disposable save clone; restore pristine baseline and validate checksum.
+
+|E-06 |Disconnect VeriSimDB, GUI and/or GSA during active play. |Game stays online; read-only core degrades truthfully; no loss of game-state authority. |Reattach control plane, reconcile, test missed observation handling.
+
+|E-07 |Malformed JSON, duplicate IDs, stale schema, invalid KYAML, injection strings, secret-bearing logs. |Fail-closed parse and authorization; redacted output; validation verdict names exact rule and scope. |No live side effects, sanitized failure record.
+|===
+
+Record timestamps, exact revisions, environment, expected vs actual,
+test fixtures, checksums and command receipts. PONS, panic-attack and
+Hypatia scans augment the above; they cannot substitute for behavioral
+failure and restore tests.
+
+== 7. Estate standards, architecture and cross-repository compatibility
+
+* DEED: A2ML is retired for new material. Legacy +profiles/*.a2ml+ and panel
+  clades are compatibility data, not permission to generate more A2ML. The
+  authoritative DEED parser grammar is
+  link:https://github.com/metadatastician/standards/blob/main/1-formats/deed/spec/abnf/deed.abnf[deed.abnf].
+  Audit and migrate eligible governance/coordination material only by
+  approved canonical rules. This plan itself is AsciiDoc, not a DEED replacement.
+* K9: files with K9 SVC Nickel component meaning conform to
+  link:https://github.com/metadatastician/standards/blob/main/1-formats/k9/spec/K9-CONTRACT-SPEC.adoc[K9 Component Contract Specification]
+  and its Nickel contract; this dialect is *not* governed by a K9 ABNF.
+  The separate YAML-like +coordination.k9+ dialect is governed by
+  link:https://github.com/metadatastician/standards/blob/main/2-protocols/k9-coordination/spec/abnf/coordination-k9-grammar_v1.3.abnf[coordination ABNF v1.3]
+  (2026-11-21 spec, optional worker +reach+). Audit each actual K9 file
+  against its correct dialect and report both checks; do not assume a
+  panel +config.k9.ncl+ is a coordination file.
+* JSON: preserve I-JSON/JCS strictness and numeric exactness where the
+  repository's +estate-compliance.yml+ requires it. Fixtures do not
+  automatically become production contracts. Canonicalization must preserve
+  documented semantics and expected tests.
+* KYAML: apply the estate format rule to authored YAML and GitHub workflow
+  files while retaining GitHub-required suffixes. Never replace rule-aware
+  validation with a generic YAML parser's success.
+* ABI/FFI: Idris2 is authoritative for wire signature, enums, layout and
+  relevant resource proofs; Zig is implementation, with generated expectation
+  files checked by CI. A claimed formal proof must name its theorem, scope,
+  trusted assumptions, compiler/version and executable linkage.
+* UI/game boundary: use existing Ephapax, AffineScript and Gossamer surfaces;
+  avoid new TypeScript. Game logic remains in IDApTIK / other games.
+  Burble is optional session/relay orchestration, not a surrogate authority
+  for gameplay. UMS is a content/authoring consumer; game-specific policies
+  belong to the game.
+* Persistence: VeriSimDB supplies optional audit, historical and search
+  modalities, not authoritative live process state and not a startup
+  dependency. Distinguish runtime observations, declarations, user intentions
+  and provenance records.
+* Testing: tie proof obligations and CI evidence to
+  +proven-tests-and-benches+, PONS, panic-attack, Hypatia and independent
+  runtime tests; never convert scanner success or a test-count badge into a
+  production assurance percentage.
+
+== 8. Release and documentation contract
+
+For every version, publish a capability matrix with columns
++feature+, +backend+, +game+, +tested environment+, +read/write mode+,
++evidence SHA+, +supported/partial/unsupported+, and +recovery/rollback+.
+The release page and installation guide must reflect that matrix, not the
+legacy count of 18 profiles.
+
+Pre-release checklist:
+
+* Version and artifact/ABI compatibility fixed; signed, reproducible build and SBOM/provenance inspected.
+* All *applicable* required gates run and pass, including any standards/lockfile governance required by repository protection; failures with zero jobs are diagnosed.
+* Clean-machine install, CLI and selected GUI smoke tests, one real declared instance and two same-profile instances tested.
+* Authentication, authorization, target identity, timeout, failure reporting, log redaction and audit receipts verified against executable negative tests.
+* Game-specific backup/restore evidence for every supported advertised backup mode; recovery and rollback rehearsed.
+* User-facing onboarding, fleet safety defaults, threats/runbooks, accessibility and privacy/retention terms updated.
+* Release canary and postflight monitored; rollback path available without changing game-state authority.
+
+The historical
+link:https://github.com/catachresis-colloquium/game-server-admin/blob/main/ROADMAP.adoc[ROADMAP.adoc]
+should remain a record of earlier phases but link to this plan as the
+current completion gate. +README.adoc+, +TEST-NEEDS.adoc+,
++docs/INDEX.adoc+ and the April deployment runbook require a truth pass
+before P1 release.
+
+== 9. Practical sequencing, uncertainty and model selection
+
+=== Completion-distance estimates (planning ranges, not measured forecasts)
+
+The present +main+ has executable foundational facilities, but M0 is not
+accepted until the read-only instance chain is integrated and verified.
+Assuming a competent contributor, usable CI/host access, and no major
+uncovered defects:
+
+[cols="2,2,4",options="header"]
+|===
+|Target |Indicative effort |Conditions and uncertainty
+
+|G0 baseline + blocking CI truth pass |1–4 focused engineer-days |No access/setup failure; root cause of zero-job CI is not yet established.
+
+|M0: one-game read-only explicit-instance MVP |Several engineer-days to ~2 weeks |Much code exists in #120/#121. Requires on-main integration, real controlled host, clean build and regression checks.
+
+|M1: safe one-game administration |~2–5 additional engineer-weeks |Authorization, explicit identity, bounded executor, concurrency/indeterminate handling, game-specific stop semantics and negative tests are actual work; do not equate #119 policy alone with execution.
+
+|P1: one-game production-grade CLI-first release |~1–3 engineer-months after M0 |Security, restore, releases, operational drills and cross-project dependencies may dominate. GUI-inclusive scope can extend this.
+
+|P2: credible multi-game, multi-host production suite |Additional months; unbounded without a supported-game matrix |Each game's lifecycle/checkpoint/restore/client-readiness behavior must be separately qualified. "18 profiles" is not 18 certified games.
+|===
+
+These are low-confidence engineering planning bands, not elapsed-time
+promises, percentage completion or a commercial SLA. Record time actually
+spent, blocked time, open critical findings and passed acceptance gates to
+replace them with an evidence-based forecast.
+
+=== Suggested GPT-6 effort
+
+* +High+ as the default for evidence reconciliation, PR dependency cleanup,
+  Zig integration, test construction, focused documentation, and CI repairs.
+* +Extra High+ for a limited architecture/proof pass across S-01/S-03/S-05/S-07:
+  authorization and effect state machine, Idris2/Zig ABI proof obligations,
+  interrupted remote effects, backup consistency, and multi-project
+  ownership decisions. Once decisions are frozen, move back to High.
+* +Medium+ for independently bounded code reviews, fixture maintenance,
+  CI-log triage, documentation and negative-test additions with
+  established acceptance criteria.
+* No model setting substitutes for a real runner, an operator-owned
+  disposable target or an accountable approval of live side effects.
+  Reserve expensive prolonged deliberation for design uncertainty, not
+  repetitive branch rebases or formatting.
+
+== 10. Decisions requiring a maintainer ruling
+
+. Define the first P1 supported environment: recommend Linux + systemd
+  with one known-good Minecraft test installation, not every game/runtime.
+. Choose the canonical profile authoring/compatibility contract and owner
+  before migrating the 18 A2ML profiles; keep deployment-instance identity
+  independently versioned.
+. Decide operator identity/roles and the trust roots for SSH and local
+  administration. Default deny until answered.
+. Define clean shutdown, checkpoint/restore, ownership of save data, and
+  whether backups can be performed hot per game.
+. Decide release packaging and whether first P1 is CLI-first or
+  GUI-inclusive; both may be valid but must be labelled accurately.
+. Assign sign-off owner for adapter-specific safety, recovery tests,
+  security review and release approval.
+
+== 11. Execution ledger
+
+Every action gets a row with ID, predecessor, branch/PR, affected seam,
+owner, before SHA, after SHA, observed test/host, acceptance evidence,
+known risks, and next action. Do not mark a milestone complete from
+a merged PR alone.
+
+[cols="1,2,2,2,3",options="header"]
+|===
+|Work item |Initial status |PR / source |Next action |Acceptance evidence
+
+|GSA-00 |OPEN |+main+, GitHub Actions |Baseline CI, release truth and root-cause failed workflows |Job logs, exact head SHA, rerun results
+|GSA-01 |OPEN |#120, #121 |Rebase and accept read-only Minecraft slice |Two-instance live read-only qualification on merged main
+|GSA-02 |OPEN |#118, #119 |Integrate bounded dispatch and policy without enabling unsafe writes |Policy property tests and negative dispatch checks
+|GSA-03 |BLOCKED by GSA-02 |Legacy action FFI |Bind handle, authorization, target, operation; contain bypass |No raw-action identity bypass possible
+|GSA-04 |BLOCKED by GSA-03 |Disposable systemd instance |Controlled lifecycle and adverse-network tests |Reconciled receipt/postcondition, no other instance affected
+|GSA-05 |OPEN / game-limited |#122, #123, #124, #130 |Qualify or explicitly disable unsupported game-specific backup/readiness |Restore and client-level evidence when supported
+|GSA-06 |OPEN |UI / release.yml / docs |GUI parity and release candidate, install/recovery drills |Versioned supported-capability matrix and signed release
+|GSA-07 |OPEN |#111, #125 |Fleet and Burble only after typed core safety |Cross-host isolation and independent game authority
+|===
+
+== 12. Next executable action
+
+1. Run the G0 baseline on +main+ and inspect no-job Governance, Mirror
+   and Scorecard failures without guessing their cause.
+2. Rebase/retarget #120 to +main+ (checking +phase2-foundation+ is already
+   included), validate its read-only identity and collector, and then
+   qualify #121's same-profile isolation.
+3. Separately inspect the raw action FFI against #119's policy and #118's
+   dispatch; propose a fail-closed compatibility wrapper, with no new
+   production lifecycle permission until G2/G3 tests succeed.
+4. Keep this ultraplan's ledger and release capability matrix updated from
+   executed evidence, not the historical 96% claim.
